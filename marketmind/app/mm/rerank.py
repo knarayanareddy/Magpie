@@ -11,7 +11,9 @@ ACCESSORY_KEYWORDS = (
     "screen protector", "schermfolie", "glass", "tempered glass",
     "grip", "dock only", "docking station only", "stand",
     "strap", "wrist strap", "polsband", "thumb grip",
-    "replacement part", "onderdeel", "reparatie", "parts only", "for parts"
+    "replacement part", "onderdeel", "reparatie", "parts only", "for parts",
+    "skin", "decal", "wrap", "sticker", "fan", "lüfter", "kühler", "radiator",
+    "controller only", "alleen controller", "game only"
 )
 
 

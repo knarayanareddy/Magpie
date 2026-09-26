@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json, os, time, urllib.error, urllib.request
 from pathlib import Path
+from . import rerank
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 APIFY_BASE = "https://api.apify.com/v2"
@@ -33,14 +34,30 @@ def load(mode: str, measure: bool = False) -> tuple[list[dict], dict]:
         if not token or not actor:
             missing = ", ".join(k for k in ("APFY_TOKEN", "APIFY_ACTOR_LISTINGS") if not os.environ.get(k))
             raise MMFeedError(f"{missing} missing — copy app/env.example to app/.env (WIRING §1)")
-        body = json.dumps({"search": "nintendo switch OR playstation ps5 OR macbook pro OR iphone OR canon camera OR airpods OR apple watch",
-                           "maxItems": 50}).encode()
-        try:
-            listings = [_normalize(x) for x in _apify_post(token, actor, body)]
-        except MMFeedError:
-            raise
-        except Exception as e:
-            raise MMFeedError(f"apify_unreachable:{type(e).__name__}") from None
+        tech_queries = [
+            q.strip() for q in os.environ.get(
+                "MP_TECH_QUERIES",
+                "nintendo switch,ps5,iphone,macbook"
+            ).split(",") if q.strip()
+        ]
+        max_per_query = max(5, int(os.environ.get("MP_MAX_PER_QUERY", "15")))
+        all_raw = []
+        for q in tech_queries:
+            body = json.dumps({
+                "platform": "marktplaats.nl",
+                "query": q,
+                "maxListings": max_per_query
+            }).encode()
+            try:
+                items = _apify_post(token, actor, body)
+                all_raw.extend(items)
+            except Exception:
+                continue
+
+        if not all_raw:
+            raise MMFeedError("marktplaats_scraper_empty: no listings returned from targeted queries")
+
+        listings = [_normalize(x) for x in all_raw]
         comps = _load_comps_live(token)
         meta = {"source": f"apify:{actor}", "mode": "live"}
     meta["cycle_time_s"] = round(time.perf_counter() - t0, 3)
@@ -64,33 +81,71 @@ def _load_comps_live(token: str) -> dict:
     actor = os.environ.get("APIFY_ACTOR_COMPS", "")
     if not actor:
         return {}
-    USD_TO_EUR = 0.92  # approximate; eBay.com returns USD, Marktplaats is EUR
-    # Target categories aligned with the search query — each gets its own median/MAD
+    out_dir = Path(__file__).resolve().parent.parent / "out"
+    cache_path = out_dir / "comps_cache.json"
+    cache_ttl = int(os.environ.get("COMPS_CACHE_TTL_S", "7200"))
+    force_refresh = os.environ.get("FORCE_COMPS_REFRESH", "0") == "1"
+
+    if not force_refresh and cache_path.exists():
+        try:
+            mtime = cache_path.stat().st_mtime
+            if (time.time() - mtime) < cache_ttl:
+                cached = json.loads(cache_path.read_text(encoding="utf-8"))
+                if isinstance(cached, dict) and cached:
+                    return cached
+        except Exception:
+            pass
+
+    marketplace = os.environ.get("EBAY_MARKETPLACE", "DE")
+    is_eur = marketplace in ("DE", "FR", "IT", "ES", "NL")
+    fx_rate = 1.0 if is_eur else 0.92
+
+    # European tech targets with minimum price floors to filter accessory noise
     queries = [
-        ("nintendo switch", "nintendo switch v2 sold"),
-        ("ps5", "playstation 5 ps5 console sold"),
-        ("macbook", "macbook pro sold"),
-        ("iphone", "iphone 15 sold"),
-        ("canon", "canon camera lens sold"),
-        ("airpods", "airpods pro sold"),
-        ("apple watch", "apple watch sold"),
+        ("nintendo switch", "nintendo switch konsole console", 50),
+        ("ps5", "playstation 5 ps5 konsole console", 100),
+        ("ps4", "playstation 4 ps4 konsole console", 40),
+        ("macbook", "apple macbook pro air", 150),
+        ("iphone", "apple iphone 13 14 15", 100),
+        ("airpods", "apple airpods pro", 30),
+        ("apple watch", "apple watch series", 50),
+        ("canon", "canon eos kamera camera", 60),
     ]
     all_comps = {}
-    for comp_key, query in queries:
-        body = json.dumps({"searchQueries": [query], "maxItems": 20}).encode()
+    for comp_key, query, min_price in queries:
+        body = json.dumps({
+            "searchQueries": [query],
+            "marketplace": marketplace,
+            "minPrice": min_price,
+            "maxProductsPerSearch": 15
+        }).encode()
         try:
-            items = _apify_post(token, actor, body)
+            raw_items = _apify_post(token, actor, body)
         except Exception:
-            continue  # missing grounding => decide() will fail closed to no_comps
-        prices = sorted(_safe_float(i.get("price")) * USD_TO_EUR for i in items
+            continue
+        filtered = rerank.filter_grounded_comps(comp_key, raw_items, min_confidence=0.70)
+        source_items = filtered if filtered else raw_items
+        prices = sorted(_safe_float(i.get("price")) * fx_rate for i in source_items
                         if i.get("price"))
-        prices = [p for p in prices if p > 0]
+        prices = [p for p in prices if p >= (min_price * 0.5)]
         if not prices:
             continue
         med = prices[len(prices) // 2]
         mad = sorted(abs(p - med) for p in prices)[len(prices) // 2] or 1.0
-        all_comps[comp_key] = {"median": round(med, 2), "mad": round(mad, 2),
-                               "n": len(prices), "source": actor}
+        all_comps[comp_key] = {
+            "median": round(med, 2),
+            "mad": round(mad, 2),
+            "n": len(prices),
+            "source": f"{actor} [{marketplace}]"
+        }
+
+    if all_comps:
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps(all_comps, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
     return all_comps
 
 
@@ -103,8 +158,8 @@ def _normalize(raw: dict) -> dict:
         "description": raw.get("description", ""),
         "price_eur": _safe_float(raw.get("price_eur") or raw.get("price")),
         "category": raw.get("category", "other"),
-        "images": raw.get("images", [])[:3],
-        "seller": raw.get("seller", {}) or {},
-        "posted_at": raw.get("posted_at", ""),
+        "images": (raw.get("images") or [])[:3],
+        "seller": raw.get("seller") or {},
+        "posted_at": raw.get("posted_at") or "",
         "is_mine": bool(raw.get("is_mine", False)),
     }

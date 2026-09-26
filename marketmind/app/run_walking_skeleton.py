@@ -547,6 +547,9 @@ if __name__ == "__main__":
     p.add_argument("--pause", action="store_true")
     p.add_argument("--resume", action="store_true")
     p.add_argument("--selftest", action="store_true")
+    p.add_argument("--loop", action="store_true", help="run continuously in an autonomous loop")
+    p.add_argument("--interval", type=int, default=300, help="seconds between loop cycles (default: 300)")
+    p.add_argument("--max-cycles", type=int, default=None, help="maximum loop cycles (default: infinite)")
     a = p.parse_args()
     if a.selftest:
         sys.exit(selftest())
@@ -582,6 +585,42 @@ if __name__ == "__main__":
         out_csv = Path(a.out or APP / "out") / "triage_export.csv"
         print(f"\n[GOOGLE SHEETS EXPORT] Successfully generated: {out_csv}")
         sys.exit(0)
+    if a.loop:
+        interval = max(10, int(a.interval or os.environ.get("CYCLE_INTERVAL_S", "300")))
+        max_c = a.max_cycles
+        cycle = 1
+        out_path = Path(a.out or APP / "out")
+        out_path.mkdir(parents=True, exist_ok=True)
+        health_file = out_path / "daemon_health.json"
+        print(f"=== MAGPIE AUTONOMOUS LOOP STARTED ===")
+        print(f"Mode: {a.mode} | Gate: {a.gate} | Interval: {interval}s | Max cycles: {max_c or 'infinite'}")
+        print(f"Kill switch: AUTO_PAUSE=1 or 'python3 run_walking_skeleton.py --pause'")
+        try:
+            while True:
+                cycle_t0 = time.time()
+                print(f"\n--- [CYCLE {cycle}] {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} ---")
+                s = run(a.mode, a.gate, a.only, a.out)
+                health_info = {
+                    "last_cycle": cycle,
+                    "last_run_id": s.get("run_id"),
+                    "last_ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "counts": s.get("counts", {}),
+                    "paused": s.get("paused", False),
+                    "pipeline_time_s": s.get("pipeline_time_s", 0),
+                    "status": "error" if s.get("error") else ("paused" if s.get("paused") else "healthy")
+                }
+                health_file.write_text(json.dumps(health_info, indent=2), encoding="utf-8")
+                if max_c and cycle >= max_c:
+                    print(f"\nReached max cycles ({max_c}). Exiting loop cleanly.")
+                    break
+                elapsed = time.time() - cycle_t0
+                sleep_secs = max(5.0, interval - elapsed)
+                print(f"Cycle {cycle} complete in {elapsed:.1f}s. Sleeping {sleep_secs:.1f}s until next cycle...")
+                time.sleep(sleep_secs)
+                cycle += 1
+        except KeyboardInterrupt:
+            print("\nAutonomous loop terminated by user.")
+            sys.exit(0)
     s = run(a.mode, a.gate, a.only, a.out)
     if s.get("error"):
         sys.exit(2)  # honest non-zero on feed failure (A10: fail closed, no fake success)

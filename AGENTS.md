@@ -104,3 +104,33 @@ Use these for context when building n8n workflows, Apify integrations, and the o
 - **Ref:** https://t.co/0LqslJzct6
 
 **Focus:** European classifieds (Marktplaats NL). Comps should target eBay.nl / EU markets, not eBay.com USD.
+
+---
+
+## 15. Autonomous Hero Loop & Operational Directives
+
+### Architecture & Grounding
+- **Classifieds Feed:** `haketa/marktplaats-scraper` focused on Benelux tech (`MP_TECH_QUERIES=nintendo switch,ps5,iphone 14,macbook`).
+- **European Comps Grounding:** `automation-lab/ebay-scraper` targeting `EBAY_MARKETPLACE=DE` (Germany / EU continental) natively in EUR (€). Accessory filters in `mm/rerank.py` strip non-device items (skins, fans, cables, empty boxes).
+- **Comps Cache:** Saved to `marketmind/app/out/comps_cache.json` with 2-hour TTL (`COMPS_CACHE_TTL_S=7200`) so recurring autonomous cycles do not incur redundant comp scraping spend.
+
+### Autonomous Continuous Execution
+Run the live pipeline continuously:
+```bash
+# Run continuous autonomous loop (default: every 300s / 5 mins)
+python3 marketmind/app/run_walking_skeleton.py --mode live --loop --interval 300
+
+# Run in background as persistent daemon:
+nohup python3 marketmind/app/run_walking_skeleton.py --mode live --loop --interval 300 > marketmind/app/out/daemon.log 2>&1 &
+```
+
+### Safety & Kill-Switch
+- **Pause immediately:** `python3 marketmind/app/run_walking_skeleton.py --pause` or set `AUTO_PAUSE=1` in `app/.env`
+- **Resume operation:** `python3 marketmind/app/run_walking_skeleton.py --resume` or set `AUTO_PAUSE=0`
+- **Health monitoring:** Check `marketmind/app/out/daemon_health.json` and `marketmind/app/out/run-summary.json`
+
+### Review & Human In The Loop
+- **Triage Grid:** Open `marketmind/app/out/triage.html` in browser
+- **Google Sheets:** Import `marketmind/app/out/triage_export.csv`
+- **Confirm Draft:** `python3 marketmind/app/run_walking_skeleton.py --confirm <DRAFT_ID>`
+
