@@ -23,6 +23,7 @@ listing ids + decisions + scores only — no titles, descriptions, URLs, images,
 | 2 | 12:55 | sold | 40 fetched → **0 after seen-ids dedupe** (all already decided in exec 1 — dedupe working as designed) |
 | 3 | 13:00 | sold | seen-ids reset for the demo; ledger kept → chain continues from exec 1 head `9b4ea2e2…`; 40 decided, 0 drafted (cap/tier/no-margin), 1 summary message (id 120) |
 | `telegram_messages.json` | Python-loop Telegram deliveries (`message_id` = Bot API delivery receipt) | logged from the moment id logging shipped (Sat 26 Sep afternoon) |
+| `sell_receipts.redacted.jsonl` | **sell side (US-9)**: photo intake → human-confirmed identity → sold-comps price → listing draft → human post → buyer-message decisions → human approvals; own hash chain | only present once real items went through `sell.py` |
 
 ## Two paths, kept distinct
 1. **Python loop** (`run_walking_skeleton.py --mode live --loop`) — the unattended hero-run engine:

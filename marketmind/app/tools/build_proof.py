@@ -98,6 +98,22 @@ def main() -> int:
     tmsgs = [json.loads(l) for l in tlog.read_text().splitlines() if l.strip()] if tlog.exists() else []
     (PROOF / "telegram_messages.json").write_text(json.dumps(tmsgs, indent=1, ensure_ascii=False))
 
+    # 6. sell side (US-9) — own chain; exported only if it exists
+    sell_p = OUT / "sell" / "receipts.jsonl"
+    sell = {"present": sell_p.exists()}
+    if sell_p.exists():
+        s_ok, s_msg = rc.verify_chain(sell_p)
+        srows = [json.loads(l) for l in sell_p.read_text().splitlines() if l.strip()]
+        (PROOF / "sell_receipts.redacted.jsonl").write_text(
+            "\n".join(json.dumps({k: r.get(k) for k in ("receipt_id", "ts", "listing_id", "actor", "policy_branch",
+                                                        "action_state", "tier", "reason_codes", "scores", "message_id",
+                                                        "prev_hash", "row_hash") if k in r}, ensure_ascii=False)
+                      for r in srows) + "\n")
+        sell = {"present": True, "chain": s_msg, "chain_ok": s_ok, "receipts": len(srows),
+                "human_steps": sum(r["actor"] == "human" for r in srows),
+                "states": dict(collections.Counter(r["action_state"] for r in srows))}
+        ok = ok and s_ok
+
     st = json.loads((OUT / "state.json").read_text())
     hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()[:16] for p in sorted(PROOF.glob("*.json*"))}
     summary = {
@@ -110,7 +126,7 @@ def main() -> int:
         "apify_runs": {k: (len(v) if isinstance(v, list) else v) for k, v in runs.items()},
         "n8n_executions": [{k: x[k] for k in ("execution_id", "status", "mode", "started", "counts",
                                               "ledger_chain_links", "telegram_message_ids")} for x in n8n],
-        "telegram_python_messages": len(tmsgs), "file_sha256_16": hashes,
+        "telegram_python_messages": len(tmsgs), "sell_side": sell, "file_sha256_16": hashes,
     }
     (PROOF / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False))
     print(json.dumps({k: summary[k] for k in ("receipts_live", "chain", "hostile_to_pursue", "seller_fields_in_receipts",

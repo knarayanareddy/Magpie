@@ -57,6 +57,7 @@ M1 done-done = T09–T15 green. The Warden vetoes gate commits until then. (Art 
 - [x] **T33** Google Sheets CSV Exporter (`--export-csv` $\to$ `triage_export.csv`).
 - [x] **T34** Watchlist Revisit Loop (resolves pending items in pipeline when market comps arrive).
 - [x] **T35** Event-Driven Topology (`wf-m2-event-driven.json` webhook trigger + async polling fallback pattern).
+- [x] **T37** *(Sat, US-9)* **Sell intake + negotiation co-pilot** — `app/sell.py` + `app/mm/sell/`: photo dump → EXIF/GPS-stripped photos grouped into items → vision *proposal* → **human-confirmed identity (mandatory; vision mislabels iPhone generations at conf ≥0.9)** → ask/floor computed from eBay.de sold comps → Dutch listing draft from confirmed facts only → human posts (`drafted ≠ posted`) → buyer messages: hostile/scam/dispute screen, deterministic offer parse, counter ladder ≥ floor, max 2 rounds, every reply a draft approved with one tap (`/magpie_sell_approve`). Isolated state + receipt chain under `out/sell/`; 0 buy-side files changed; `tests/test_sell.py` 59 checks. **Needs real items (T04's 5 own listings).**
 - [x] **T36** Apify MCP Scraper Suite (`labrat011/reddit-scraper` defect lookup + `datavoyantlab/n8n-templates-scraper`).
 
 ---

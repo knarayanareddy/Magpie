@@ -64,5 +64,11 @@
   "message_id": 119,
   "source": "python-loop",
   "first_line": "🐦 Magpie loop armed · mode=live gate=v0 every 300s · pings: drafts, errors, kill"
+ },
+ {
+  "ts": "2026-09-26T13:22:08Z",
+  "message_id": 123,
+  "source": "python-loop",
+  "first_line": "✅ Magpie feed recovered after 2 failed cycles"
  }
 ]
