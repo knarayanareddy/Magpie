@@ -46,11 +46,56 @@ def _fetch_sold(query: str, min_price: int) -> list[dict]:
     return notice._apify_post(token, actor, body)
 
 
+def _memory_prices(q: str) -> tuple[list[float], dict] | None:
+    """US-10 DB-first: fresh eBay-sold observations for the query's product key from out/market.db.
+    None (=> scrape) when disabled, unkeyable, or fewer than MIN_SALES fresh sales."""
+    if os.environ.get("SELL_MEMORY", "1") != "1":
+        return None
+    try:
+        from ..memory import db as mdb, keys as mkeys, store as mstore
+        key = mkeys.rules_key(q)
+        if not key:
+            return None
+        con = mdb.connect()
+        t0 = time.perf_counter()
+        obs = [p for p, t in mstore.fresh_obs(con, key, "ebay_sold")
+               if not EXCLUDE_ALWAYS.search(t) and not notice.DEFECT_RE.search(t)]
+        hit = len(obs) >= MIN_SALES
+        ms = mstore._lookup(con, "comps", hit, t0, f"sell|{key}|n={len(obs)}")
+        con.commit()
+        con.close()
+        return (obs, {"product_key": key, "lookup_ms": round(ms, 3)}) if hit else None
+    except Exception:
+        return None                                   # memory is an accelerator, never a single point of failure
+
+
+def _memory_writeback(q: str, raw: list[dict]) -> None:
+    if os.environ.get("SELL_MEMORY", "1") != "1":
+        return
+    try:
+        from ..memory import db as mdb, keys as mkeys, store as mstore
+        con = mdb.connect()
+        mstore.ingest_ebay(con, raw, basis="ebay_sold", product_key=mkeys.rules_key(q))
+        con.close()
+    except Exception:
+        pass
+
+
 def price(query: str, condition: str, sell_dir: Path, fetch=None, min_price: int = 5) -> dict:
-    """Returns {status: ok|no_comps|error, ask, floor, median, p40, p60, n, basis, source, query, samples}."""
+    """Returns {status: ok|no_comps|error, ask, floor, median, p40, p60, n, basis, source, query, samples}.
+    Lookup order (US-10): market memory (≥5 fresh sold obs for the product key) -> local 6h cache -> Apify."""
     q = " ".join((query or "").lower().split())[:80]
     if len(q) < 3:
         return {"status": "no_comps", "reason": "empty_query", "query": q}
+    mem = _memory_prices(q) if fetch is None else None     # injected fetch (tests) bypasses memory
+    if mem:
+        prices, info = mem
+        med0 = quantile(prices, 0.5)
+        prices = sorted(p for p in prices if med0 / 3 <= p <= med0 * 3)
+        base = {"query": q, "n": len(prices), "basis": "sold", "fetched_at": time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime()),
+                "source": f"market memory ({info['product_key']}, eBay.de sold, ≤{int(os.environ.get('MEM_MAX_AGE_SOLD_H', '72'))}h)",
+                "cache_hit": "memory", "lookup_ms": info["lookup_ms"]}
+        return _finish(prices, condition, base)
     cache_p = sell_dir / "comps_cache.json"
     cache = json.loads(cache_p.read_text()) if cache_p.exists() else {}
     hit = cache.get(q)
@@ -67,10 +112,19 @@ def price(query: str, condition: str, sell_dir: Path, fetch=None, min_price: int
                 "soldCurrency": i.get("soldCurrency"), "endedAt": i.get("endedAt")} for i in raw]
         cache[q] = {"fetched_at": fetched, "raw": raw}
         cache_p.write_text(json.dumps(cache, ensure_ascii=False))
+        if fetch is None:
+            _memory_writeback(q, raw)                     # scraped once => remembered (US-10 write-back)
     cands = [{"title": i["title"], "price": notice._safe_float(i["soldPrice"])} for i in raw
              if i.get("soldPrice") and i.get("soldCurrency") in (None, "EUR")
              and not EXCLUDE_ALWAYS.search(i["title"]) and not notice.DEFECT_RE.search(i["title"])]
     grounded = rerank.filter_grounded_comps(q, cands, min_confidence=0.75)
+    # model grounding (bug found via US-10 memory comparison, Sat 26 Sep): word-overlap alone lets
+    # "iPhone 14 Pro Max" sales price a plain "iPhone 14" (+€60 median). A comp whose product key is a
+    # DIFFERENT known key is dropped; unkeyable comp titles are kept (overlap already vetted them).
+    from ..memory import keys as mkeys
+    qkey = mkeys.rules_key(q)
+    if qkey:
+        grounded = [c for c in grounded if mkeys.rules_key(c["title"]) in (None, qkey)]
     prices = sorted(c["price"] for c in grounded if c["price"] > 0)
     # drop extreme outliers (bundles / lots) beyond 3x median
     if prices:
@@ -78,13 +132,20 @@ def price(query: str, condition: str, sell_dir: Path, fetch=None, min_price: int
         prices = [p for p in prices if med0 / 3 <= p <= med0 * 3]
     base = {"query": q, "n": len(prices), "basis": "sold", "fetched_at": time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(fetched)),
             "source": f"{os.environ.get('APIFY_ACTOR_SOLD', 'caffein.dev/ebay-sold-listings')} [ebay.de, sold 30d, used]"}
+    return _finish(prices, condition, base)
+
+
+def _finish(prices: list[float], condition: str, base: dict) -> dict:
+    """Shared tail for memory and scraped paths: fail-closed on thin data, condition-adjusted P60/P40."""
     if len(prices) < MIN_SALES:
         return {**base, "status": "no_comps", "reason": f"only_{len(prices)}_grounded_sales"}
     f = CONDITION_FACTOR.get(condition, CONDITION_FACTOR["unknown"])
     p40, med, p60 = quantile(prices, FLOOR_Q), quantile(prices, 0.5), quantile(prices, ASK_Q)
     ask, floor = round_price(p60 * f), round_price(p40 * f)
     if floor >= ask:
-        floor = round_price(ask * 0.85)
+        # tight market (P40≈P60 round to the same step): floor = one rounding step below ask, not a flat -15%
+        step = 1 if ask < 50 else 5 if ask < 200 else 10
+        floor = max(step, ask - step)
     return {**base, "status": "ok", "ask": ask, "floor": floor, "median": round(med, 2), "p40": round(p40, 2),
             "p60": round(p60, 2), "condition_factor": f,
             "samples": [round(p, 2) for p in prices][:40]}

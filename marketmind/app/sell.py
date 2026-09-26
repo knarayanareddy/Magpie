@@ -82,6 +82,9 @@ def main(argv: list[str] | None = None) -> int:
                     p = it["proposal"]
                     print(f"  {it['id']} {it['status']:18} photos={len(it['photos'])} proposal: {p['brand']} {p['model']} "
                           f"(certain={p['model_certain']}, vision={p['vision']}) → confirm with the exact model")
+                    if p.get("memory_hint"):
+                        print(f"    memory: you labelled a near-identical photo '{p['memory_hint']['model']}' "
+                              f"({p['memory_hint']['at'][:10]}) — still confirm")
             elif a.cmd == "status":
                 print(_status_text(d, a.short))
             elif a.cmd == "confirm":
@@ -94,7 +97,9 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"  vision hints (NOT in the listing unless you confirm them): defects={hints['defects']} "
                           f"accessories={hints['accessories']} → re-run confirm with --defect/--acc to include")
                 if pr["status"] == "ok":
-                    print(f"{a.item} priced from {pr['n']} eBay.de sold comps (30d, used): ask €{pr['ask']} · floor €{pr['floor']} "
+                    src = (f"market memory, 0 Apify calls, {pr.get('lookup_ms')} ms" if pr.get("cache_hit") == "memory"
+                           else "eBay.de sold comps (30d, used)")
+                    print(f"{a.item} priced from {pr['n']} sales [{src}]: ask €{pr['ask']} · floor €{pr['floor']} "
                           f"· median €{pr['median']} · P40–P60 €{pr['p40']}–€{pr['p60']} → next: sell.py draft {a.item}")
                 else:
                     print(f"{a.item} {pr['status']} ({pr.get('reason')}) — set it yourself: sell.py price {a.item} --ask N --floor N")

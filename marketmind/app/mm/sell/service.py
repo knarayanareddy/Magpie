@@ -13,6 +13,23 @@ from . import identify, intake, listing, negotiate, price as pricing
 from .store import SellState, now, receipt
 
 
+def _remember(kind: str, subject: str, proposed=None, corrected=None, product_key: str | None = None,
+              own_sale: tuple[str, float, str] | None = None) -> None:
+    """US-10: human corrections/outcomes become market memory. Never blocks or fails a sell step."""
+    import os
+    if os.environ.get("SELL_MEMORY", "1") != "1":
+        return
+    try:
+        from ..memory import db as mdb, store as mstore
+        con = mdb.connect()
+        mstore.feedback(con, kind, subject, proposed, corrected, product_key)
+        if own_sale:
+            mstore.record_own_sale(con, *own_sale)
+        con.close()
+    except Exception:
+        pass
+
+
 def run_intake(folder: Path, d: Path, *, vision=None) -> list[dict]:
     """Sanitize + group + vision proposal. Returns created items."""
     files = intake.collect(folder)
@@ -29,6 +46,15 @@ def run_intake(folder: Path, d: Path, *, vision=None) -> list[dict]:
     for grp in intake.group(fresh):
         iid = st.next_id("s")
         prop = (vision or identify.propose)([d / "photos" / p["file"] for p in grp])
+        try:                                                   # US-10: "you corrected a photo like this before"
+            from ..memory import db as mdb, store as mstore
+            _con = mdb.connect()
+            hint = mstore.correction_hint(_con, grp[0]["dhash"])
+            _con.close()
+        except Exception:
+            hint = None
+        if hint:
+            prop = {**prop, "memory_hint": hint}
         privacy = prop["contains_face"] or prop["contains_document_or_address"]
         status = "privacy_review" if privacy else ("needs_confirmation")
         it = {"id": iid, "created": now(), "status": status, "photos": [p["file"] for p in grp],
@@ -77,6 +103,13 @@ def confirm(item_id: str, d: Path, *, model: str, brand: str | None = None, cond
                    "defects": list(defects or []), "accessories": list(accessories or []),
                    "vision_hints": {"defects": p["visible_defects"], "accessories": p["included_accessories"]},
                    "query": " ".join((query or model).split()), "confirmed_at": now()}
+    from ..memory import keys as mkeys
+    pkey = mkeys.rules_key(it["facts"]["query"])
+    it["facts"]["product_key"] = pkey
+    # memory of being corrected: keyed by the first photo's dHash, so a similar photo later surfaces the hint
+    first = (it.get("photo_meta") or [{}])[0].get("dhash")
+    _remember("model_id", first or item_id, proposed=f"{p['brand']} {p['model']}".strip(), corrected=model,
+              product_key=pkey)
     receipt(d, item_id, "pursued_assisted", ["human_confirmed_identity"] + (["privacy_cleared"] if clear_privacy else []),
             actor="human", policy_branch="sell:confirm",
             scores={"vision_model_agreed": p["model"].lower() in model.lower() or model.lower() in p["model"].lower()})
@@ -86,7 +119,8 @@ def confirm(item_id: str, d: Path, *, model: str, brand: str | None = None, cond
         it["status"] = "priced"
         receipt(d, item_id, "priced", ["sold_comps"], policy_branch="sell:price",
                 scores={k: pr[k] for k in ("ask", "floor", "median", "p40", "p60", "n", "condition_factor")},
-                extra={"comps_source": pr["source"], "comps_basis": "sold"})
+                extra={"comps_source": pr["source"], "comps_basis": "sold",
+                       **({"cache_hit": pr["cache_hit"], "lookup_ms": pr.get("lookup_ms")} if pr.get("cache_hit") else {})})
     else:
         it["status"] = "no_comps"
         receipt(d, item_id, "escalated", ["no_comps", pr.get("reason", "")], policy_branch="sell:price",
@@ -105,6 +139,8 @@ def set_price(item_id: str, d: Path, *, ask: int, floor: int) -> dict:
         raise PermissionError(f"{item_id}: confirm the item before pricing (identity first)")
     it["price"] = {**(it.get("price") or {}), "status": "ok", "ask": int(ask), "floor": int(floor), "basis": "human"}
     it["status"] = "priced"
+    _remember("price_override", item_id, proposed={k: (it.get("price") or {}).get(k) for k in ("median", "n")},
+              corrected={"ask": int(ask), "floor": int(floor)}, product_key=(it.get("facts") or {}).get("product_key"))
     receipt(d, item_id, "pursued_assisted", ["human_price_override"], actor="human", policy_branch="sell:price",
             scores={"ask": ask, "floor": floor})
     st.save()
@@ -209,6 +245,10 @@ def close(item_id: str, d: Path, *, outcome: str, price_eur: int | None = None) 
     st = SellState(d)
     it = st.item(item_id)
     it["status"], it["closed"] = outcome, {"at": now(), "price_eur": price_eur}
+    pkey = (it.get("facts") or {}).get("product_key")
+    _remember("offer_outcome", item_id, proposed={"ask": (it.get("price") or {}).get("ask")},
+              corrected={"outcome": outcome, "price_eur": price_eur}, product_key=pkey,
+              own_sale=(pkey, float(price_eur), f"sell:{item_id}") if (outcome == "sold" and pkey and price_eur) else None)
     receipt(d, item_id, "pursued_assisted", [f"human_marked_{outcome}"], actor="human", policy_branch="sell:close",
             scores={"price_eur": price_eur, "ask": (it.get("price") or {}).get("ask"),
                     "floor": (it.get("price") or {}).get("floor")})

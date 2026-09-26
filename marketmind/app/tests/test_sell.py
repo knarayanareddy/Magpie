@@ -7,6 +7,7 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
+os.environ["MARKET_DB"] = str(Path(tempfile.mkdtemp()) / "market_test.db")   # never touch the real out/market.db
 from PIL import Image  # noqa: E402
 from mm import receipts as rc  # noqa: E402
 from mm.sell import identify, intake, negotiate, price as pricing, service  # noqa: E402
@@ -50,7 +51,10 @@ def stub_vision(certain=False, model="iPhone 14", face=False):
 SOLD = [{"title": f"Apple iPhone 14 128GB Blau gebraucht {i}", "soldPrice": f"{p:.2f}", "soldCurrency": "EUR", "endedAt": "2026-09-20"}
         for i, p in enumerate([240, 255, 260, 262, 270, 275, 280, 290, 300, 310])] + \
        [{"title": "iPhone 14 defekt Bastler", "soldPrice": "90", "soldCurrency": "EUR", "endedAt": "2026-09-20"},
-        {"title": "Apple iPhone 14 Hülle Case", "soldPrice": "12", "soldCurrency": "EUR", "endedAt": "2026-09-20"}]
+        {"title": "Apple iPhone 14 Hülle Case", "soldPrice": "12", "soldCurrency": "EUR", "endedAt": "2026-09-20"},
+        # regression (found live Sat): Pro / Pro Max sales must not price a plain iPhone 14
+        {"title": "Apple iPhone 14 Pro Max 128GB Space Black", "soldPrice": "390", "soldCurrency": "EUR", "endedAt": "2026-09-20"},
+        {"title": "Apple iPhone 14 Pro 128GB Deep Purple", "soldPrice": "410", "soldCurrency": "EUR", "endedAt": "2026-09-20"}]
 
 
 def fetch_ok(q, mp):
@@ -119,7 +123,7 @@ with tempfile.TemporaryDirectory() as td:
     it = service.confirm(a, out, model="iPhone 14 128GB", condition="used", fetch=fetch_ok,
                          defects=["kras op achterkant"], accessories=["doos"])
     pr = it["price"]
-    check(pr["status"] == "ok" and pr["n"] == 10, f"defect + accessory sales excluded; n=10 grounded sold comps ({pr.get('n')})")
+    check(pr["status"] == "ok" and pr["n"] == 10, f"defect, accessory AND 14 Pro/Pro Max sales excluded; n=10 grounded ({pr.get('n')})")
     check(pr["floor"] < pr["ask"] and pr["floor"] >= 200, f"ask €{pr['ask']} > floor €{pr['floor']} (condition-adjusted P60/P40)")
     exp_ask = pricing.round_price(pricing.quantile([240, 255, 260, 262, 270, 275, 280, 290, 300, 310], 0.60) * 0.95)
     check(pr["ask"] == exp_ask, f"ask is computed, deterministic (€{pr['ask']} == €{exp_ask})")
