@@ -1,5 +1,5 @@
 {
-  "name": "MarketMind M1 \u2014 full loop (import on the day; creds via $env)",
+  "name": "MarketMind M1 — full loop (import on the day; creds via $env)",
   "nodes": [
     {
       "parameters": {
@@ -39,7 +39,7 @@
         "jsonBody": "={\"search\":\"nintendo switch OR canon lens OR ps4\",\"maxItems\":25}"
       },
       "id": "n2",
-      "name": "Apify \u2014 listings (NOTICE)",
+      "name": "Apify — listings (NOTICE)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -49,7 +49,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// seen-ids dedupe (T09) \u2014 persist via workflow static data\nconst sd = $getWorkflowStaticData('global');\nsd.seen = sd.seen || {};\nitems = items.filter(it => {\n  const id = it.json.id || it.json.url || (it.json.title ? String(it.json.title) : null);\n  if (!id) return true;\n  if (sd.seen[id]) return false;\n  sd.seen[id] = Date.now();\n  return true;\n});\nreturn items;"
+        "jsCode": "// seen-ids dedupe (T09) — persist via workflow static data\nconst sd = $getWorkflowStaticData('global');\nsd.seen = sd.seen || {};\nitems = items.filter(it => {\n  const id = it.json.id || it.json.url || (it.json.title ? String(it.json.title) : null);\n  if (!id) return true;\n  if (sd.seen[id]) return false;\n  sd.seen[id] = Date.now();\n  return true;\n});\nreturn items;"
       },
       "id": "n3",
       "name": "seen-ids dedupe",
@@ -62,7 +62,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// margin_z is COMPUTED here from comps (Art V.2: never asked of a model)\n// + kill-switch check (Art VII.3) & deterministic facts preparation\nconst COMPS = {\n  \"nintendo switch v2\": { median: 180, mad: 20 },\n  \"nintendo switch\": { median: 170, mad: 25 },\n  \"switch pro controller\": { median: 50, mad: 5 },\n  \"iphone 14\": { median: 520, mad: 50 },\n  \"ps4 slim\": { median: 140, mad: 20 },\n  \"ps5\": { median: 380, mad: 40 },\n  \"canon ef-s 18-55\": { median: 65, mad: 15 },\n  \"canon ae\": { median: 240, mad: 30 },\n  \"gazelle e-bike\": { median: 800, mad: 60 }\n};\nconst ADVANCE_FEE = /(iban|nl\\d{2}[A-Z]{4}\\d{4,}|tikkie|paypal\\.me|pay (in advance|to reserve)|transfer \u20ac?\\d+)/i;\nconst paused = $env.AUTO_PAUSE === '1';\n\nfor (const it of items) {\n  const title = String(it.json.title || '').toLowerCase();\n  const desc = String(it.json.description || '');\n  const fullText = (title + ' ' + desc).slice(0, 2000);\n  const price = Number(it.json.price_eur || it.json.price || 0);\n\n  let match = null;\n  for (const k of Object.keys(COMPS).sort((a,b) => b.length - a.length)) {\n    if (title.includes(k)) { match = COMPS[k]; break; }\n  }\n\n  let mz = null;\n  if (match && match.mad > 0 && price > 0) {\n    mz = (match.median - price) / match.mad;\n  } else if (it.json.facts && it.json.facts.margin_z !== undefined) {\n    mz = it.json.facts.margin_z;\n  }\n\n  const isMine = !!it.json.is_mine;\n  const offpay = !!(it.json.offplatform_payment_request || ADVANCE_FEE.test(fullText));\n  const dup = Number(it.json.duplicate_photo || 0);\n\n  it.json.text = fullText;\n  it.json.facts = {\n    margin_z: mz,\n    comps: match,\n    duplicate_photo: dup,\n    offplatform_payment_request: offpay,\n    text: fullText,\n    is_mine: isMine\n  };\n\n  it.json.over_cap = paused;\n  it.json.tier = isMine ? 'T1' : (price > 200 ? 'T3' : (it.json.tier || 'T2'));\n\n  const offerEur = price > 0 ? Math.min(Math.round(price * 0.8 / 5) * 5, Math.floor(price * 0.8)) : 0;\n  it.json.draft = {\n    offer_eur: offerEur,\n    text_nl: `Hoi! Mooi dat je ${it.json.title || 'dit item'} aanbiedt. Zou je \u20ac${offerEur} willen accepteren? Ik kan het ophalen wanneer het uitkomt. (Laat gerust weten of dit past)`\n  };\n\n  const ts = new Date().toISOString();\n  const rawInput = `${it.json.id || ''}:${price}:${title}`;\n  let hash = 0;\n  for (let i = 0; i < rawInput.length; i++) {\n    hash = ((hash << 5) - hash) + rawInput.charCodeAt(i);\n    hash |= 0;\n  }\n  it.json.receipt_id = `rcpt_${Date.now()}_${Math.abs(hash).toString(16)}`;\n  it.json.ts = ts;\n  it.json.input_hash = Math.abs(hash).toString(16).padStart(16, '0');\n}\nreturn items;"
+        "jsCode": "// price + facts (code) — margin_z COMPUTED here from LIVE comps (Art V.2: never asked of a model).\n// Comps = the Python loop's live eBay DE comps cache (SOLD prices, 30d, used; asking-price fallback per\n// family), injected as $env.COMPS_JSON at deploy ({key: [median, mad, n]}) + $env.COMPS_BASIS.\n// No comps => margin_z null => gate escalates (fail-closed).\nlet COMPS = {};\ntry { COMPS = JSON.parse($env.COMPS_JSON || '{}'); } catch (e) { COMPS = {}; }\nconst COMPS_SOURCE = String($env.COMPS_SOURCE || 'unconfigured');\nconst ADVANCE_FEE = /(iban|nl\\d{2}[A-Z]{4}\\d{4,}|tikkie|paypal\\.me|pay (in advance|to reserve)|transfer €?\\d+)/i;\n// mirror of mm/rerank.py NON_DEVICE_LISTING_RE — repair/part/wanted ads never grounded vs device comps\nconst ACC_FOR = /\\b(case|hoes(je)?|cover|oplader|lader|kabel|screen\\s*protector|skin|tas|houder|dock)\\s+(voor|for|für)\\b/i;\nconst FAMILY_EXCLUDE = { 'nintendo switch': /\\b(lite|switch\\s*2)\\b/i };\nconst COMPS_BASIS = String($env.COMPS_BASIS || 'asking');\nconst NON_DEVICE = /\\b(reparatie|reparaties|repareren|repair|reparatur|vervangen|vervanging|onderdel(en)?|onderdeel|parts?|scherm\\s*reparatie|accu\\s*vervangen|batterij\\s*vervangen|screenprotector|gezocht|zoek(e|ende)?|inkoop|wij\\s*kopen|opkoper|te\\s*huur|huren|lessen|cursus|installeren|service)\\b/i;\n// mirror of mm/rerank.py COMPS_GENERATIONS — comps family built only from these generations\nconst GENS = { iphone: ['13', '14', '15'] };\nlet m = null;\nconst paused = $env.AUTO_PAUSE === '1';\nlet crypto = null;\ntry { crypto = require('crypto'); } catch (e) { crypto = null; }\nconst h16 = (s) => crypto ? crypto.createHash('sha256').update(s).digest('hex').slice(0, 16)\n  : (() => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return ('fnv1a-' + h.toString(16)).padStart(16, '0'); })();\n\nfor (const it of items) {\n  const titleRaw = String(it.json.title || '');\n  const title = titleRaw.toLowerCase();\n  const desc = String(it.json.description || '');\n  const fullText = (title + ' ' + desc).slice(0, 2000);\n  const price = Number(it.json.price_eur || it.json.price || 0);\n\n  let key = null;\n  for (const k of Object.keys(COMPS).sort((a, b) => b.length - a.length)) {\n    if (title.includes(k)) { key = k; break; }\n  }\n  let note = null;\n  if (key && (NON_DEVICE.test(titleRaw) || ACC_FOR.test(titleRaw))) { key = null; note = 'not_device'; }\n  else if (key && FAMILY_EXCLUDE[key] && FAMILY_EXCLUDE[key].test(titleRaw)) { key = null; note = 'model_mismatch'; }\n  else if (key && GENS[key] && (m = titleRaw.match(/\\biphone\\s*(\\d{1,2})\\b/i)) && !GENS[key].includes(m[1])) { key = null; note = 'model_mismatch'; }\n  else if (key && !(price > 0)) { note = 'no_price'; }\n  const c = key ? COMPS[key] : null;           // [median, mad, n]\n  let mz = null;\n  if (c && c[1] > 0 && price > 0) mz = (c[0] - price) / c[1];\n\n  const isMine = !!it.json.is_mine;\n  it.json.id = it.json.id || it.json.listingId || String(it.json.url || '').slice(-24);\n  it.json.text = fullText;\n  it.json.facts = {\n    margin_z: mz,\n    comps: c ? { median: c[0], mad: c[1], n: c[2], source: COMPS_SOURCE, basis: COMPS_BASIS } : null,\n    comps_key: key,\n    grounding_note: note,\n    duplicate_photo: Number(it.json.duplicate_photo || 0),\n    offplatform_payment_request: !!(it.json.offplatform_payment_request || ADVANCE_FEE.test(fullText)),\n    text: fullText,\n    is_mine: isMine\n  };\n  it.json.over_cap = paused;\n  it.json.tier = isMine ? 'T1' : (price > 200 ? 'T3' : (it.json.tier || 'T2'));\n\n  // H1 offer band: min(round5(ask*0.8), floor(ask*0.8)) — same formula as mm/act.py::draft_offer\n  const offerEur = price > 0 ? Math.min(Math.round(price * 0.8 / 5) * 5, Math.floor(price * 0.8)) : 0;\n  it.json.draft = {\n    offer_eur: offerEur,\n    offer_ratio: price > 0 ? Math.round(offerEur / price * 100) / 100 : null,\n    text_nl: `Hoi! Mooi dat je ${titleRaw || 'dit item'} aanbiedt. Zou je €${offerEur} willen accepteren? Ik kan het ophalen wanneer het uitkomt. (Laat gerust weten of dit past)`\n  };\n  it.json.ts = new Date().toISOString();\n  it.json.input_hash = h16(`${it.json.id}:${price}:${title}`);\n  it.json.hash_alg = crypto ? 'sha256/16' : 'fnv1a';\n}\nreturn items;"
       },
       "id": "n4",
       "name": "price + facts (code)",
@@ -101,7 +101,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// POLICY (fail-closed) \u2014 gate v1 mirror of skin/policy.py::gate_v1\nconst BLOCK = new Set([\"weapon\", \"animal\", \"other_illegal\"]);\nconst CLOSED = new Set([\"ok\", \"weapon\", \"animal\", \"counterfeit\", \"pii\", \"other_illegal\", \"unknown\"]);\nconst CRED = new Set([\"clear_authentic\", \"unclear\", \"obvious_fake\"]);\n\nfunction choice(a, k) { return CLOSED.has(a && a[k]) ? a[k] : \"unknown\"; }\nfunction scoreLabel(a, k) { return CRED.has(a && a[k]) ? a[k] : \"unclear\"; }\nfunction noul(a, k, missing) { const v = a ? parseFloat(a[k]) : NaN; return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : missing; }\n\nfunction gateV1(answers, facts) {\n  if (!answers) return { action: \"escalate\", reason_codes: [\"judge_unconfigured\"], human_required: true };\n  const bucket = choice(answers, \"policy_bucket\");\n  const fake = scoreLabel(answers, \"counterfeit_risk\");\n  const inj = noul(answers, \"injection_or_jailbreak\", 1.0);  // fail-closed: missing injection question -> 1.0 (skip)\n  const needs = noul(answers, \"needs_human\", 1.0);\n  const p2g = noul(answers, \"price_too_good\", 1.0);\n  const mz = (facts.margin_z === undefined) ? null : facts.margin_z;\n  const dup = parseFloat(facts.duplicate_photo || 0.0);\n  const offpay = !!facts.offplatform_payment_request;\n  if (BLOCK.has(bucket)) return { action: \"skip\", reason_codes: [bucket], human_required: true };\n  if (inj >= 0.5) return { action: \"skip\", reason_codes: [\"injection_or_jailbreak\"], human_required: true };\n  if (bucket === \"pii\" || offpay) return { action: \"skip\", reason_codes: [bucket === \"pii\" ? \"pii\" : \"offplatform_payment_request\"], human_required: true };\n  if (bucket === \"counterfeit\" || fake === \"obvious_fake\") return { action: \"skip\", reason_codes: [\"counterfeit\"], human_required: true };\n  if (bucket === \"unknown\" || needs >= 0.6) return { action: \"escalate\", reason_codes: [needs >= 0.6 ? \"needs_human\" : \"unknown\"], human_required: true };\n  if (dup >= 0.5) return { action: \"escalate\", reason_codes: [\"duplicate_photo\"], human_required: true };\n  if (mz === null) return { action: \"escalate\", reason_codes: [\"no_comps\"], human_required: true };\n  if (p2g >= 0.6 || mz > 3.0) return { action: \"escalate\", reason_codes: [\"price_too_good\"], human_required: true };\n  if (bucket === \"ok\" && p2g < 0.4 && mz <= 2.0) return { action: \"pursue\", reason_codes: [\"ok\"], human_required: false };\n  return { action: \"escalate\", reason_codes: [bucket], human_required: true };\n}\n\nfor (const it of items) {\n  let answers = null;\n  try {\n    if (it.json.choices && it.json.choices[0] && it.json.choices[0].message) {\n      answers = JSON.parse(it.json.choices[0].message.content);\n    } else if (it.json.judge_answers) {\n      answers = it.json.judge_answers;\n    }\n  } catch (e) {\n    answers = null;\n  }\n  const f = it.json.facts || {};\n  let g = gateV1(answers, f);\n  // tier gate (outside policy): T3 or over_cap promotes pursue -> escalate\n  if (g.action === 'pursue' && (it.json.tier === 'T3' || it.json.over_cap)) {\n    g = { action: 'escalate', reason_codes: ['tier_t3_or_cap'], human_required: true };\n  }\n  it.json.gate = g;\n  it.json.judge_answers = answers;\n  it.json.action_state = g.action === 'pursue' ? (it.json.is_mine ? 'pursued_auto' : 'drafted') : (g.action === 'skip' ? 'skipped' : 'escalated');\n}\nreturn items;"
+        "jsCode": "// POLICY (fail-closed) — gate v1 mirror of skin/policy.py::gate_v1\nconst BLOCK = new Set([\"weapon\", \"animal\", \"other_illegal\"]);\nconst CLOSED = new Set([\"ok\", \"weapon\", \"animal\", \"counterfeit\", \"pii\", \"other_illegal\", \"unknown\"]);\nconst CRED = new Set([\"clear_authentic\", \"unclear\", \"obvious_fake\"]);\n\nfunction choice(a, k) { return CLOSED.has(a && a[k]) ? a[k] : \"unknown\"; }\nfunction scoreLabel(a, k) { return CRED.has(a && a[k]) ? a[k] : \"unclear\"; }\nfunction noul(a, k, missing) { const v = a ? parseFloat(a[k]) : NaN; return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : missing; }\n\nfunction gateV1(answers, facts) {\n  if (!answers) return { action: \"escalate\", reason_codes: [\"judge_unconfigured\"], human_required: true };\n  const bucket = choice(answers, \"policy_bucket\");\n  const fake = scoreLabel(answers, \"counterfeit_risk\");\n  const inj = noul(answers, \"injection_or_jailbreak\", 1.0);  // fail-closed: missing injection question -> 1.0 (skip)\n  const needs = noul(answers, \"needs_human\", 1.0);\n  const p2g = noul(answers, \"price_too_good\", 1.0);\n  const mz = (facts.margin_z === undefined) ? null : facts.margin_z;\n  const dup = parseFloat(facts.duplicate_photo || 0.0);\n  const offpay = !!facts.offplatform_payment_request;\n  if (BLOCK.has(bucket)) return { action: \"skip\", reason_codes: [bucket], human_required: true };\n  if (inj >= 0.5) return { action: \"skip\", reason_codes: [\"injection_or_jailbreak\"], human_required: true };\n  if (bucket === \"pii\" || offpay) return { action: \"skip\", reason_codes: [bucket === \"pii\" ? \"pii\" : \"offplatform_payment_request\"], human_required: true };\n  if (bucket === \"counterfeit\" || fake === \"obvious_fake\") return { action: \"skip\", reason_codes: [\"counterfeit\"], human_required: true };\n  if (bucket === \"unknown\" || needs >= 0.6) return { action: \"escalate\", reason_codes: [needs >= 0.6 ? \"needs_human\" : \"unknown\"], human_required: true };\n  if (dup >= 0.5) return { action: \"escalate\", reason_codes: [\"duplicate_photo\"], human_required: true };\n  if (mz === null) return { action: \"escalate\", reason_codes: [\"no_comps\"], human_required: true };\n  if (p2g >= 0.6 || mz > 3.0) return { action: \"escalate\", reason_codes: [\"price_too_good\"], human_required: true };\n  if (bucket === \"ok\" && p2g < 0.4 && mz <= 2.0) return { action: \"pursue\", reason_codes: [\"ok\"], human_required: false };\n  return { action: \"escalate\", reason_codes: [bucket], human_required: true };\n}\n\nfor (const it of items) {\n  // (cap state lives inside the loop so the parity test's gate-function extraction stays unchanged)\n  const sdCap = $getWorkflowStaticData('global');\n  const today = new Date().toISOString().slice(0, 10);\n  if (sdCap.draft_day !== today) { sdCap.draft_day = today; sdCap.drafts_today = 0; }\n  const DRAFT_CAP = Number($env.N8N_MAX_DRAFTS || 3);\n  let answers = null;\n  try {\n    if (it.json.choices && it.json.choices[0] && it.json.choices[0].message) {\n      answers = JSON.parse(it.json.choices[0].message.content);\n    } else if (it.json.judge_answers) {\n      answers = it.json.judge_answers;\n    }\n  } catch (e) {\n    answers = null;\n  }\n  const f = it.json.facts || {};\n  let g = gateV1(answers, f);\n  if (g.action === 'escalate' && g.reason_codes.length === 1 && g.reason_codes[0] === 'no_comps' && f.grounding_note) {\n    g = { ...g, reason_codes: [f.grounding_note] };\n  }\n  // tier gate (outside policy): T3 or over_cap promotes pursue -> escalate\n  if (g.action === 'pursue' && (it.json.tier === 'T3' || it.json.over_cap)) {\n    g = { action: 'escalate', reason_codes: ['tier_t3_or_cap'], human_required: true };\n  }\n  if (g.action === 'pursue' && !f.is_mine) {\n    if (sdCap.drafts_today >= DRAFT_CAP) g = { action: 'escalate', reason_codes: ['over_cap'], human_required: true };\n    else sdCap.drafts_today += 1;\n  }\n  it.json.gate = g;\n  it.json.judge_answers = answers;\n  it.json.action_state = g.action === 'pursue' ? (f.is_mine ? 'pursued_auto' : 'drafted') : (g.action === 'skip' ? 'skipped' : 'escalated');\n}\nreturn items;"
       },
       "id": "n6",
       "name": "POLICY (fail-closed)",
@@ -188,11 +188,11 @@
     {
       "parameters": {
         "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
-        "text": "=DRAFT (drafted != sent): {{ $json.title }} \u2014 {{ $json.draft.text_nl }}\n[approve] [override\u2192escalate]",
+        "text": "=📝 DRAFT (drafted ≠ sent — you press Send, Art VII.2) · n8n exec {{ $execution.id }}\n{{ $json.title }}\nask €{{ $json.price }} → offer €{{ $json.draft.offer_eur }} ({{ Math.round($json.draft.offer_ratio*100) }}% of ask)\ncomps {{ $json.facts.comps_key }}: median €{{ $json.facts.comps.median }} · MAD €{{ $json.facts.comps.mad }} · n={{ $json.facts.comps.n }} ({{ $json.facts.comps.basis }})\nmargin_z = ({{ $json.facts.comps.median }} − {{ $json.price }}) / {{ $json.facts.comps.mad }} = {{ Math.round($json.facts.margin_z*100)/100 }}\n{{ $json.draft.text_nl }}\nreceipt {{ $json.receipt.row_hash }}",
         "additionalFields": {}
       },
       "id": "n8",
-      "name": "Telegram \u2014 draft-assist",
+      "name": "Telegram — draft-assist",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
@@ -202,58 +202,43 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
-        "text": "=ESCALATE: {{ $json.title }} \u00b7 {{ ($json.gate.reason_codes || []).join(',') }} \u00b7 tier {{ $json.tier }}",
-        "additionalFields": {}
+        "jsCode": "// Receipt ledger (Art VII.1) — append-only, hash-chained receipts kept in workflow static data\n// (persisted for production executions) + visible per item in this n8n execution's log.\n// Replaces the Airtable node (no PAT). Content-only: no seller fields are written (Art III).\nlet crypto = null;\ntry { crypto = require('crypto'); } catch (e) { crypto = null; }\nconst h16 = (s) => crypto ? crypto.createHash('sha256').update(s).digest('hex').slice(0, 16)\n  : (() => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return ('fnv1a-' + h.toString(16)).padStart(16, '0'); })();\nconst sd = $getWorkflowStaticData('global');\nsd.ledger = sd.ledger || [];\nlet prev = sd.last_hash || 'genesis';\nconst execId = String($execution.id);\nfor (const it of items) {\n  const f = it.json.facts || {};\n  const g = it.json.gate || {};\n  const body = {\n    receipt_id: `n8n-${execId}-${h16(String(it.json.id) + it.json.ts)}`,\n    ts: it.json.ts || new Date().toISOString(),\n    n8n_execution_id: execId,\n    listing_id: String(it.json.id || ''),\n    input_hash: it.json.input_hash,\n    actor: 'agent',\n    policy_branch: `gate_${g.gate_version || (it.json.judge_answers !== undefined ? 'v1' : 'v0')}:${g.action}`,\n    action_state: it.json.action_state,\n    reason_codes: g.reason_codes || [],\n    tier: it.json.tier,\n    margin_z: f.margin_z === null || f.margin_z === undefined ? null : Math.round(f.margin_z * 100) / 100,\n    comps_key: f.comps_key || null,\n    comps_n: f.comps ? f.comps.n : null,\n    comps_basis: f.comps ? f.comps.basis : null,\n    action_state_note: it.json.action_state === 'drafted' ? 'drafted != sent (Art VII.2)' : '',\n    prev_hash: prev\n  };\n  body.row_hash = h16(JSON.stringify(body));\n  prev = body.row_hash;\n  sd.ledger.push(body);\n  it.json.receipt = body;\n}\nsd.last_hash = prev;\nif (sd.ledger.length > 500) sd.ledger = sd.ledger.slice(-500);\nreturn items;"
       },
-      "id": "n9",
-      "name": "Telegram \u2014 escalation",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "id": "ledger-1",
+      "name": "Receipt ledger (Art VII.1)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
-        1400,
-        100
+        1190,
+        -220
       ]
     },
     {
       "parameters": {
-        "operation": "create",
-        "base": {
-          "__rl": true,
-          "value": "={{ $env.AIRTABLE_BASE }}",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "={{ $env.AIRTABLE_TABLE }}",
-          "mode": "id"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "receipt_id": "={{ $json.receipt_id }}",
-            "ts": "={{ $json.ts }}",
-            "input_hash": "={{ $json.input_hash }}",
-            "action_state": "={{ $json.action_state }}",
-            "reason_codes": "={{ ($json.gate.reason_codes || []).join(',') }}",
-            "policy_branch": "={{ 'gate:' + ($json.gate.action||'') }}",
-            "tier": "={{ $json.tier }}",
-            "actor": "agent"
-          },
-          "matchingColumns": [
-            "receipt_id"
-          ],
-          "attemptToMatchTypes": false
-        },
-        "options": {}
+        "jsCode": "// Run summary — ONE Telegram line per execution (no per-item escalation spam; bot shared with Hermes)\nconst rows = $input.all().map(i => i.json.receipt || {});\nconst n = (s) => rows.filter(r => r.action_state === s).length;\nconst refused = rows.filter(r => r.action_state === 'skipped' || r.action_state === 'escalated').slice(0, 3)\n  .map(r => `  ${r.action_state === 'skipped' ? 'SKIP' : 'ESC '} ${String(r.listing_id).slice(0, 22)} ${(r.reason_codes || []).join(',')}`);\nconst text = [\n  `n8n · Magpie ${$workflow.name.split(' ')[1] || ''} · execution ${$execution.id}`,\n  `scanned ${rows.length} · skipped ${n('skipped')} · escalated ${n('escalated')} · drafted ${n('drafted')} (awaiting you) · auto ${n('pursued_auto')}`,\n  `comps: ${String($env.COMPS_SOURCE || 'unconfigured')}`,\n  refused.length ? 'refused first:' : 'refused first: (none)',\n  ...refused,\n  `receipts: ${rows.length} hash-chained · head ${rows.length ? rows[rows.length - 1].row_hash : 'n/a'}`,\n  'drafted != sent — a human presses Send (Art VII.2)'\n].join('\\n');\nreturn [{ json: { text, counts: { skipped: n('skipped'), escalated: n('escalated'), drafted: n('drafted'), pursued_auto: n('pursued_auto') }, execution_id: String($execution.id) } }];"
       },
-      "id": "n10",
-      "name": "Airtable \u2014 receipt (T18)",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "id": "summary-1",
+      "name": "Run summary (1 line/execution)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1600,
-        0
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {}
+      },
+      "id": "summary-tg",
+      "name": "Telegram — run summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1820,
+        120
       ]
     }
   ],
@@ -262,14 +247,14 @@
       "main": [
         [
           {
-            "node": "Apify \u2014 listings (NOTICE)",
+            "node": "Apify — listings (NOTICE)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Apify \u2014 listings (NOTICE)": {
+    "Apify — listings (NOTICE)": {
       "main": [
         [
           {
@@ -317,7 +302,23 @@
       "main": [
         [
           {
+            "node": "Receipt ledger (Art VII.1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receipt ledger (Art VII.1)": {
+      "main": [
+        [
+          {
             "node": "route by action_state",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Run summary (1 line/execution)",
             "type": "main",
             "index": 0
           }
@@ -328,43 +329,20 @@
       "main": [
         [
           {
-            "node": "Telegram \u2014 draft-assist",
+            "node": "Telegram — draft-assist",
             "type": "main",
             "index": 0
           }
         ],
-        [
-          {
-            "node": "Telegram \u2014 escalation",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Airtable \u2014 receipt (T18)",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [],
+        []
       ]
     },
-    "Telegram \u2014 draft-assist": {
+    "Run summary (1 line/execution)": {
       "main": [
         [
           {
-            "node": "Airtable \u2014 receipt (T18)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Telegram \u2014 escalation": {
-      "main": [
-        [
-          {
-            "node": "Airtable \u2014 receipt (T18)",
+            "node": "Telegram — run summary",
             "type": "main",
             "index": 0
           }

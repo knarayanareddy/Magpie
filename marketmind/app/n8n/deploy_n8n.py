@@ -24,7 +24,9 @@ APP = N8N_DIR.parent
 WORKFLOWS = ["wf-m0-scan-decide.json", "wf-m1-full.json", "wf-m2-event-driven.json"]
 # non-secret config mirrored into n8n Variables ($vars)
 VAR_KEYS = ["APIFY_ACTOR_LISTINGS", "MP_TECH_QUERIES", "MP_MAX_PER_QUERY", "AUTO_PAUSE",
-            "MODEL_JUDGE", "TF_BASE_URL", "AIRTABLE_BASE", "AIRTABLE_TABLE", "TELEGRAM_CHAT_ID"]
+            "MODEL_JUDGE", "TF_BASE_URL", "TELEGRAM_CHAT_ID", "N8N_MAX_DRAFTS",
+            "COMPS_JSON", "COMPS_SOURCE", "COMPS_BASIS"]   # COMPS_* derived from out/comps_cache.json (live eBay DE)
+COMPS_CACHE = APP / "out" / "comps_cache.json"
 SECRET_ENV_REFS = ("APFY_TOKEN", "TF_API_KEY", "OPENAI_API_KEY")
 CRED_APIFY = "Magpie · Apify (Bearer)"
 CRED_JUDGE = "Magpie · MODEL_JUDGE (Bearer)"
@@ -74,7 +76,24 @@ class N8N:
                 return out
 
 
+def comps_vars() -> dict:
+    """Live comps for the n8n price node: {key: [median, mad, n]} + provenance line (asking prices)."""
+    if not COMPS_CACHE.exists():
+        return {}
+    c = json.loads(COMPS_CACHE.read_text())
+    import datetime
+    ts = datetime.datetime.utcfromtimestamp(COMPS_CACHE.stat().st_mtime).strftime("%Y-%m-%dT%H:%MZ")
+    src = sorted({v.get("source", "?") for v in c.values()})
+    bases = sorted({v.get("basis", "asking") for v in c.values()})
+    basis = bases[0] if len(bases) == 1 else "mixed(" + ",".join(f"{k}:{v.get('basis', 'asking')}" for k, v in c.items()) + ")"
+    return {"COMPS_JSON": json.dumps({k: [v["median"], v["mad"], v.get("n", 0)] for k, v in c.items()},
+                                     separators=(",", ":")),
+            "COMPS_SOURCE": f"{', '.join(src)} @ {ts} · {len(c)} families · basis={basis}",
+            "COMPS_BASIS": basis}
+
+
 def upsert_variables(api: N8N, env: dict) -> None:
+    env = {**env, "N8N_MAX_DRAFTS": env.get("N8N_MAX_DRAFTS", "3"), **comps_vars()}
     existing = {v["key"]: v for v in api.list_all("/variables")}
     for k in VAR_KEYS:
         val = env.get(k, "")
