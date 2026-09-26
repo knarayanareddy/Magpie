@@ -57,7 +57,9 @@ def main() -> int:
               "Account made with Google and no password? Click 'Wachtwoord vergeten?' to set one via e-mail first.\n"
               "Magpie does not see your password. Close the window when you're logged in.")
         try:
-            while ctx.pages:
+            # exit when the MAIN window closes — a leftover popup (e.g. an abandoned Google sign-in) used to keep
+            # the script and the profile lock alive after the user closed the window
+            while ctx.pages and not page.is_closed():
                 time.sleep(1)
         except KeyboardInterrupt:
             pass

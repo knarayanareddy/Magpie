@@ -27,7 +27,11 @@ def context() -> dict:
     drafted = {}
     for u in (OUT / "drafts").glob("*.url") if (OUT / "drafts").exists() else []:
         drafted[u.stem] = u.read_text().strip()
-    return {"own_listing_ids": set(own.get("listing_ids", [])), "own_urls": own.get("urls", {}),
+    # own-listing ACTIONS are restricted to the dedicated demo account (Art XI): its ads were registered from the
+    # logged-in session (tools/register_demo_ads.py). The 4 personal accounts stay read-only.
+    demo = own.get("demo", {})
+    return {"own_listing_ids": set(demo.get("listing_ids", [])), "own_urls": demo.get("urls", {}),
+            "own_prices": demo.get("prices", {}),
             "drafted": drafted, "drafted_listing_urls": set(drafted.values()),
             "feed_urls": set(drafted.values()) | set(own.get("urls", {}).values()),
             "state_path": OUT / "state.json"}
@@ -38,16 +42,15 @@ def cmd_request(a) -> int:
     if a.kind in ("bump", "price"):
         url = ctx["own_urls"].get(a.ref)
         if not url:
-            print(f"❌ {a.ref} is not a registered own ad with a known URL (run tools/import_own_ads.py)")
+            print(f"❌ {a.ref} is not a registered DEMO-account ad (run tools/register_demo_ads.py). "
+                  f"Personal accounts are read-only.")
             return 2
         action = "bump_own_listing" if a.kind == "bump" else "edit_own_price"
         params = {}
         if a.kind == "price":
-            st = json.loads((OUT / "sell" / "state.json").read_text()) if (OUT / "sell" / "state.json").exists() else {"items": {}}
-            item = next((i for i in st["items"].values() if (i.get("posted") or {}).get("ref") == a.ref), None)
-            old = (item or {}).get("posted", {}).get("listed_price_eur")
+            old = ctx["own_prices"].get(a.ref)
             if not old:
-                print(f"❌ no listed price known for {a.ref} (Bieden ads have none) — can't reprice safely")
+                print(f"❌ no current price known for {a.ref} — re-run tools/register_demo_ads.py")
                 return 2
             params = {"old_price_eur": int(old), "new_price_eur": int(a.value)}
     else:

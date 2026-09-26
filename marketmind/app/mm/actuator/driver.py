@@ -23,6 +23,8 @@ PROFILE = lambda d: d / "profile"                                   # persistent
 # Google's OAuth page refuse ("This browser or app may not be secure"). Marktplaats e-mail+password login is the
 # supported path; Google sign-in may still be refused by Google regardless.
 LAUNCH_ARGS = {"ignore_default_args": ["--enable-automation"], "args": ["--disable-blink-features=AutomationControlled"]}
+PAYMENT_URL_RE = re.compile(r"/(checkout|betal|payment|order|bestel|afreken)", re.I)
+UPCALL_NOTE = "'Bel omhoog' = feature-phone-upcall (paid phone call-up) — never pressed (Art V.3)"
 PAYMENT_RE = re.compile(r"\b(betalen|betaal\s*nu|afrekenen|ideal|creditcard|paypal|tikkie|bestelling\s+plaatsen|"
                         r"direct\s+kopen|koop\s+nu|checkout|kosten:\s*€)\b", re.I)
 LOGIN_RE = re.compile(r"\b(inloggen|log\s*in\s*met|wachtwoord)\b", re.I)
@@ -64,9 +66,11 @@ class Run:
 
     # ---- guards (run after every navigation / before every click)
     def guard(self, *, allow_login_text: bool = False) -> None:
-        host = urlparse(self.page.url).hostname
-        if host not in ALLOWED_HOSTS:
-            raise Stop("off_host_navigation", str(host))
+        u = urlparse(self.page.url)
+        if u.hostname not in ALLOWED_HOSTS:
+            raise Stop("off_host_navigation", str(u.hostname))
+        if PAYMENT_URL_RE.search(u.path):
+            raise Stop("payment_page", u.path[:60])
         body = self.page.locator("body").inner_text(timeout=5000)[:20000]
         if CAPTCHA_RE.search(body):
             raise Stop("captcha_or_bot_check")
@@ -127,45 +131,90 @@ def _send_message(r: Run) -> dict:
     return {"final": "sent"}
 
 
-def _own_ad_menu(r: Run) -> None:
-    """Own ad page shows owner controls when logged in as the owner; otherwise this is not our ad."""
-    r.goto(r.e["url"])
-    r.shot("own-ad-opened")
-    if r.page.get_by_role("button", name="Bericht").count() and not r.page.get_by_role(
-            "link", name=re.compile(r"Wijzig|Bewerk", re.I)).count():
-        raise Stop("not_owner_session", "logged-in account does not own this ad")
+def edit_url(listing_id: str) -> str:
+    """Owner edit form for an m-number (observed Sat on the demo account: /plaats/<m>/edit)."""
+    if not re.fullmatch(r"m\d{9,11}", listing_id):
+        raise Stop("bad_listing_id", listing_id)
+    return f"https://www.marktplaats.nl/plaats/{listing_id}/edit"
+
+
+PRICE_LABEL = re.compile(r"^(Vraagprijs|Prijs|Bieden vanaf)$", re.I)
+
+
+def price_field(page):
+    """The editable amount: 'Vraagprijs' (vaste prijs) or 'Bieden vanaf' (price.minimumBidPrice) for Bieden ads."""
+    f = page.get_by_label(PRICE_LABEL)
+    if not f.count():
+        f = page.locator("input[name='price.minimumBidPrice']:visible, input[name='price.askingPrice']:visible, "
+                         "input[name='price.amount']:visible")
+    return f
+
+
+def euros(v: str) -> int | None:
+    """'€ 300,00' / '300,00' / '1.250' -> 300 / 300 / 1250"""
+    m = re.search(r"\d[\d.]*", (v or "").split(",")[0])
+    return int(m.group(0).replace(".", "")) if m else None
+
+
+def _open_own_edit(r: Run) -> None:
+    """Owner-only page: if the session doesn't own the ad, Marktplaats won't show this form."""
+    r.goto(edit_url(r.e["listing_id"]))
+    r.shot("edit-form-opened")
+    if f"/plaats/{r.e['listing_id']}/edit" not in r.page.url or \
+            not r.page.get_by_role("button", name="Opslaan").count():
+        raise Stop("not_owner_session", "logged-in account can't edit this ad")
 
 
 def _edit_own_price(r: Run) -> dict:
-    _own_ad_menu(r)
-    r.click(r.page.get_by_role("link", name=re.compile(r"^(Wijzig|Bewerk)", re.I)), "edit-form-opened")
-    price = r.page.get_by_label(re.compile(r"^Prijs|Vraagprijs", re.I))
-    if not price.count():
-        price = r.page.locator("input[name*=price i]:visible, input[id*=price i]:visible")
+    _open_own_edit(r)
+    ptype = r.page.locator("#Dropdown-prijstype")
+    ptype_before = ptype.first.input_value() if ptype.count() else None
+    price = price_field(r.page)
     if not price.count():
         raise Stop("price_field_not_found")
-    current = price.first.input_value()
-    if current and re.sub(r"\D", "", current.split(",")[0]) not in (str(r.e["params"]["old_price_eur"]), ""):
-        raise Stop("price_changed_since_request", f"page shows {current}")
-    price.first.fill(str(r.e["params"]["new_price_eur"]))
+    current = euros(price.first.input_value())
+    if current != r.e["params"]["old_price_eur"]:
+        raise Stop("price_changed_since_request", f"page shows €{current}, request assumed €{r.e['params']['old_price_eur']}")
+    # paid options must stay unticked (the observed form has none; refuse if any priced checkbox is ticked)
+    paid = r.page.eval_on_selector_all("input[type=checkbox]:checked", """els => els.filter(e => {
+        const l = (e.labels && e.labels[0] ? e.labels[0].innerText : '') + ' ' + (e.closest('label,li,div')||{innerText:''}).innerText;
+        return /€\s?\d/.test(l); }).length""")
+    if paid:
+        raise Stop("paid_option_selected", f"{paid} priced checkbox(es) ticked")
+    price.first.fill(f"{r.e['params']['new_price_eur']},00")
+    price.first.scroll_into_view_if_needed()                  # witness frame shows the typed price
+    typed = euros(price.first.input_value())
     r.shot("price-typed")
-    save = r.page.get_by_role("button", name=re.compile(r"^(Opslaan|Wijzigingen opslaan|Plaats|Bijwerken)", re.I))
-    if not save.count():
-        raise Stop("save_button_not_found")
+    if typed != r.e["params"]["new_price_eur"]:
+        raise Stop("price_not_typed", f"field shows €{typed}")
+    if ptype.count() and ptype.first.input_value() != ptype_before:
+        raise Stop("price_type_changed")
+    save = r.page.get_by_role("button", name="Opslaan")
     if not r.live:
-        return {"final": "dry_run_stopped_before_save"}
+        return {"final": "dry_run_stopped_before_save", "page_price_eur": current}
     r.click(save, "price-saved")
-    return {"final": "saved"}
+    r.page.wait_for_timeout(2500)
+    r.goto(edit_url(r.e["listing_id"]))                       # verify from the source of truth, not the click
+    after = euros(price_field(r.page).first.input_value()) if price_field(r.page).count() else None
+    r.shot("price-verified")
+    if after != r.e["params"]["new_price_eur"]:
+        raise Stop("save_not_verified", f"page shows €{after} after save")
+    return {"final": "saved_verified", "page_price_eur": after}
 
 
 def _bump_own_listing(r: Run) -> dict:
-    _own_ad_menu(r)
-    renew = r.page.get_by_role("button", name=re.compile(r"^Verlengen|Gratis verlengen", re.I))
+    """Free 'Verlengen' on Mijn advertenties only. The row's other controls are PAID: 'Sneller verkopen'
+    (upsell) and 'Bel omhoog' (feature-phone-upcall) — never located, never pressed (Art V.3)."""
+    r.goto("https://www.marktplaats.nl/my-account/sell/index.html")
+    r.shot("my-ads-opened")
+    lid = r.e["listing_id"]
+    if not r.page.locator(f"a[href*='{lid}']").count():
+        raise Stop("not_owner_session", "ad not in this account's Mijn advertenties")
+    renew = r.page.locator(f"button[data-advertisement-id='{lid}'], a[data-advertisement-id='{lid}']") \
+        .filter(has_text=re.compile(r"^\s*(Gratis\s+)?Verlengen\s*$", re.I))
     if not renew.count():
-        renew = r.page.get_by_role("link", name=re.compile(r"^Verlengen|Gratis verlengen", re.I))
-    if not renew.count():
-        # "Omhoogplaatsen" is paid on Marktplaats => never clicked (Art V.3)
-        raise Stop("free_renew_unavailable", "only paid 'Omhoogplaatsen' offered — refusing (Art V.3)")
+        raise Stop("free_renew_unavailable", "no free 'Verlengen' for this ad now (offered near expiry); "
+                                             "only paid options visible — refusing (Art V.3)")
     if not r.live:
         return {"final": "dry_run_stopped_before_renew"}
     r.click(renew, "renewed")
