@@ -16,6 +16,15 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP))
+
+env_file = APP / ".env"
+if env_file.exists():
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
 from mm import (act, browser_act, costs as costs_mod, decide, expand, export,  # noqa: E402
                 health, inbound, jev, judge, notice, receipts, reddit_intel, report,  # noqa: E402
                 rerank, state as state_mod, triage, watchlist)  # noqa: E402

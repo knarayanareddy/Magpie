@@ -34,7 +34,7 @@ def load(mode: str, measure: bool = False) -> tuple[list[dict], dict]:
             missing = ", ".join(k for k in ("APFY_TOKEN", "APIFY_ACTOR_LISTINGS") if not os.environ.get(k))
             raise MMFeedError(f"{missing} missing — copy app/env.example to app/.env (WIRING §1)")
         body = json.dumps({"search": "nintendo switch OR canon lens OR ps4 OR ps5 OR polaroid",
-                           "category": "games_consoles_camera", "maxItems": 25}).encode()
+                           "maxItems": 25}).encode()
         try:
             listings = [_normalize(x) for x in _apify_post(token, actor, body)]
         except MMFeedError:
@@ -48,9 +48,10 @@ def load(mode: str, measure: bool = False) -> tuple[list[dict], dict]:
 
 
 def _apify_post(token: str, actor: str, body: bytes) -> list:
-    """Token travels in the Authorization header, never in the URL (audit C4: URLs leak via
-    tracebacks, proxies, and process listings)."""
-    url = f"{APIFY_BASE}/acts/{actor}/run-sync-get-dataset-items"
+    """Token travels in the Authorization header, never in the URL (audit C4).
+    Apify REST API expects username~actor-name in the URL path."""
+    actor_id = actor.replace("/", "~")
+    url = f"{APIFY_BASE}/acts/{actor_id}/run-sync-get-dataset-items"
     req = urllib.request.Request(url, data=body,
                                  headers={"Content-Type": "application/json",
                                           "Authorization": f"Bearer {token}"})
