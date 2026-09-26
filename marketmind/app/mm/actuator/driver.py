@@ -195,7 +195,10 @@ def _edit_own_price(r: Run) -> dict:
     r.click(save, "price-saved")
     r.page.wait_for_timeout(2500)
     r.goto(edit_url(r.e["listing_id"]))                       # verify from the source of truth, not the click
-    after = euros(price_field(r.page).first.input_value()) if price_field(r.page).count() else None
+    pf = price_field(r.page)
+    after = euros(pf.first.input_value()) if pf.count() else None
+    if pf.count():
+        pf.first.scroll_into_view_if_needed()                 # witness frame must show the saved price itself
     r.shot("price-verified")
     if after != r.e["params"]["new_price_eur"]:
         raise Stop("save_not_verified", f"page shows €{after} after save")

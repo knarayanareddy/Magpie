@@ -1,34 +1,36 @@
 {
-  "built_at": "2026-09-26T14:47:31Z",
-  "receipts_total": 139,
-  "receipts_live": 139,
+  "built_at": "2026-09-26T17:22:25Z",
+  "receipts_total": 153,
+  "receipts_live": 153,
   "live_window": [
     "2026-09-26T09:56:32Z",
-    "2026-09-26T13:42:04Z"
+    "2026-09-26T17:17:19Z"
   ],
   "chain": "chain intact",
   "chain_ok": true,
-  "chain_head": "a7c99325f268b844",
+  "chain_head": "1d1541153ef3b0ae",
   "hostile_to_pursue": 0,
   "seller_fields_in_receipts": 0,
   "live_action_states": {
-    "escalated": 133,
+    "escalated": 147,
     "drafted": 5,
     "skipped": 1
   },
   "live_reasons_top": {
     "no_comps": 88,
-    "no_margin": 28,
-    "price_too_good": 11,
+    "no_margin": 36,
+    "price_too_good": 14,
     "ok": 5,
     "no_price": 4,
-    "ok,over_cap": 2,
-    "low_health": 1
+    "ok,over_cap": 3,
+    "low_health": 1,
+    "model_mismatch": 1,
+    "condition_mismatch": 1
   },
-  "dhash_index_size": 44,
-  "seen_ids": 139,
+  "dhash_index_size": 58,
+  "seen_ids": 153,
   "apify_runs": {
-    "haketa/marktplaats-scraper": 243,
+    "haketa/marktplaats-scraper": 326,
     "automation-lab/ebay-scraper": 26
   },
   "n8n_executions": [
@@ -72,53 +74,81 @@
       ]
     }
   ],
-  "telegram_python_messages": 18,
+  "telegram_python_messages": 31,
   "sell_side": {
-    "present": false
+    "present": true,
+    "chain": "chain intact",
+    "chain_ok": true,
+    "receipts": 5,
+    "human_steps": 5,
+    "states": {
+      "pursued_assisted": 5
+    }
   },
   "market_memory": {
     "present": true,
     "fetch": {
-      "runs": 306,
-      "fetched": 3055,
-      "new": 157,
-      "repeat_rate": 0.949,
-      "usd": 4.598,
-      "runs_per_new": 1.95,
-      "usd_per_new": 0.0293
+      "runs": 368,
+      "fetched": 3675,
+      "new": 171,
+      "repeat_rate": 0.953,
+      "usd": 5.808,
+      "runs_per_new": 2.15,
+      "usd_per_new": 0.034
     },
     "lookups": {
       "comps": {
-        "n": 35,
-        "hit_rate": 0.571,
+        "n": 50,
+        "hit_rate": 0.54,
         "hit_p50_ms": 0.117,
-        "hit_p95_ms": 1.028
+        "hit_p95_ms": 0.433
       },
       "verdict": {
-        "n": 39,
+        "n": 53,
         "hit_rate": 0.0,
         "hit_p50_ms": null,
         "hit_p95_ms": null
       }
     },
     "store": {
-      "listings": 157,
-      "price_obs": 332,
-      "verdicts": 39,
-      "fetches": 306,
+      "listings": 171,
+      "price_obs": 428,
+      "verdicts": 53,
+      "fetches": 368,
       "feedback": 0,
-      "product_keys": 152
+      "product_keys": 166
     },
-    "cache_hit_receipts": {}
+    "cache_hit_receipts": {
+      "memory": 7
+    }
+  },
+  "actuator": {
+    "present": true,
+    "chain": "chain intact",
+    "chain_ok": true,
+    "receipts": 20,
+    "human_approvals": 7,
+    "live_actions": [
+      {
+        "ts": "2026-09-26T17:20:51Z",
+        "policy_branch": "act:edit_own_price",
+        "action_state": "pursued_auto",
+        "reason_codes": [
+          "saved_verified"
+        ]
+      }
+    ],
+    "refusals": {}
   },
   "file_sha256_16": {
-    "apify_runs.json": "4ba59cb4f0ca34d4",
-    "comps_provenance.json": "6b79aaa43af9c0d6",
+    "apify_runs.json": "bda1d5d4db028822",
+    "comps_provenance.json": "327aee2ed584fa76",
     "comps_sold_vs_asking.json": "4d51e68e2788e05c",
-    "memory_metrics.json": "5627f0001fdc4ffc",
+    "memory_metrics.json": "aa16eefa1b01403c",
     "n8n_executions.json": "8c75f8d62f7f9fa7",
-    "receipts.redacted.jsonl": "2a4bee6e05459efd",
-    "summary.json": "ad80dd6c2b482b21",
-    "telegram_messages.json": "77a5a76e9aabd550"
+    "receipts.redacted.jsonl": "e42d289be2555890",
+    "sell_receipts.redacted.jsonl": "ad5c96781fe62420",
+    "summary.json": "3a38425f35be9e28",
+    "telegram_messages.json": "fed4c6f4d4bccac5"
   }
 }

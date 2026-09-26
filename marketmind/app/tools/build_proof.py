@@ -127,6 +127,20 @@ def main() -> int:
             memory.update({"fetch": mm.get("fetch"), "lookups": mm.get("lookups"), "store": mm.get("store"),
                            "cache_hit_receipts": dict(collections.Counter(
                                r["scores"].get("cache_hit") for r in rows if r.get("scores", {}).get("cache_hit")))})
+    # 8. actuator (US-11) — counts + outcomes only. Screenshots/videos stay in out/actuator (they show the
+    #    logged-in account's contact details) and are NEVER copied into the public proof pack.
+    act_p = OUT / "actuator" / "receipts.jsonl"
+    actuator: dict = {"present": act_p.exists()}
+    if act_p.exists():
+        arows = [json.loads(l) for l in act_p.read_text().splitlines() if l.strip()]
+        a_ok, a_msg = rc.verify_chain(act_p)
+        actuator.update({"chain": a_msg, "chain_ok": a_ok, "receipts": len(arows),
+                         "human_approvals": sum(r["actor"] == "human" for r in arows),
+                         "live_actions": [{k: r.get(k) for k in ("ts", "policy_branch", "action_state", "reason_codes")}
+                                          for r in arows if r.get("scores", {}).get("live") is True],
+                         "refusals": dict(collections.Counter(c for r in arows if r["action_state"] == "skipped"
+                                                             for c in r["reason_codes"]))})
+        ok = ok and a_ok
     hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()[:16] for p in sorted(PROOF.glob("*.json*"))}
     summary = {
         "built_at": now, "receipts_total": len(rows), "receipts_live": len(live),
@@ -138,7 +152,7 @@ def main() -> int:
         "apify_runs": {k: (len(v) if isinstance(v, list) else v) for k, v in runs.items()},
         "n8n_executions": [{k: x[k] for k in ("execution_id", "status", "mode", "started", "counts",
                                               "ledger_chain_links", "telegram_message_ids")} for x in n8n],
-        "telegram_python_messages": len(tmsgs), "sell_side": sell, "market_memory": memory, "file_sha256_16": hashes,
+        "telegram_python_messages": len(tmsgs), "sell_side": sell, "market_memory": memory, "actuator": actuator, "file_sha256_16": hashes,
     }
     (PROOF / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False))
     print(json.dumps({k: summary[k] for k in ("receipts_live", "chain", "hostile_to_pursue", "seller_fields_in_receipts",
