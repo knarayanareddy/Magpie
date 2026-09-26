@@ -1,15 +1,34 @@
 #!/bin/bash
 # magpiectl — zero-token phone controls for the Magpie loop (wired as Hermes quick_commands).
 # Usage: magpiectl.sh pause|resume|status
-set -u
+# Kill-switch rule: NEVER print a success line unless the state change was verified on disk.
+set -u -o pipefail
 APP="$(cd "$(dirname "$0")/.." && pwd)"
 PY=/usr/bin/python3
-cd "$APP" || exit 1
+cd "$APP" || { echo "❌ Magpie: app dir not found"; exit 1; }
+
+read_paused() {
+  "$PY" -c 'import json,sys; print(json.load(open("out/state.json")).get("paused"))' 2>/dev/null
+}
+
+set_switch() {  # $1 = pause|resume, $2 = expected paused value (True|False)
+  local out rc got
+  out=$("$PY" run_walking_skeleton.py "--$1" 2>&1); rc=$?
+  got=$(read_paused)
+  if [ $rc -ne 0 ] || [ "$got" != "$2" ]; then
+    echo "❌ Magpie $1 FAILED (exit $rc, state.json paused=${got:-unreadable}) — kill switch NOT confirmed."
+    echo "${out}" | tail -3
+    echo "Fallback: AUTO_PAUSE=1 in app/.env, or stop the loop process."
+    return 1
+  fi
+  return 0
+}
+
 case "${1:-status}" in
-  pause)  "$PY" run_walking_skeleton.py --pause  2>&1 | tail -1
-          echo "Magpie: new drafts blocked from the next cycle (receipts keep flowing, observe-only)." ;;
-  resume) "$PY" run_walking_skeleton.py --resume 2>&1 | tail -1
-          echo "Magpie: acting again from the next cycle." ;;
+  pause)  set_switch pause True || exit 1
+          echo "⏸ Magpie paused (verified: state.json paused=True). Next item is observe-only; no new drafts." ;;
+  resume) set_switch resume False || exit 1
+          echo "▶️ Magpie resumed (verified: state.json paused=False). Acting again from the next item." ;;
   status) "$PY" - <<'EOF'
 import json, subprocess
 from pathlib import Path
