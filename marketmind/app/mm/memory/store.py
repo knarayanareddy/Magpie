@@ -5,7 +5,7 @@ is measured, not claimed. All thresholds are env-tunable and conservative; memor
 fewer than MEM_MIN_OBS observations of the REQUESTED basis (sold is never padded with asking prices).
 """
 from __future__ import annotations
-import hashlib, json, os, time
+import hashlib, json, os, re, time
 from datetime import datetime, timezone
 
 from . import keys
@@ -18,6 +18,11 @@ MAX_AGE_H = {"ebay_sold": float(os.environ.get("MEM_MAX_AGE_SOLD_H", "72")),   #
              "own_sale": 24 * 90}
 SELLER_FIELDS = ("sellerName", "sellerId", "sellerType", "sellerUsername", "sellerFeedbackPercent",
                  "sellerFeedbackScore", "sellerPositivePercent", "sellerFeedbackCount", "location")
+# partial units: a single earbud / case-only / box-only / account-locked item is not the product's price
+# (measured Sat: 5 of 18 "airpods pro 2" sold obs were single "Rechts/Links Ersatz" earbuds at €44-58)
+PARTIAL_RE = re.compile(r"\b(rechts|links|rechter|linker|left|right|einzeln|single|ersatz|replacement|case\s*only|"
+                        r"nur\s*(das\s*)?(case|ladecase|geh[aä]use|ovp|karton|box)|ladecase\s*only|leerkarton|"
+                        r"account\s*gebunden|gesperrt|icloud|mdm|attrappe|dummy)\b", re.I)
 
 
 def _f(v) -> float | None:
@@ -104,8 +109,8 @@ def ingest_ebay(con, raw_items: list[dict], *, basis: str, product_key: str | No
     n = 0
     for it in raw_items:
         title = str(it.get("title") or "")
-        if notice.DEFECT_RE.search(title):
-            continue                                  # a broken unit's price is not a market price
+        if notice.DEFECT_RE.search(title) or PARTIAL_RE.search(title):
+            continue                                  # broken / partial unit: not a market price for the product
         price = _f(it.get("soldPrice") if basis == "ebay_sold" else it.get("price"))
         cur = it.get("soldCurrency") or it.get("currency") or "EUR"
         if not price or cur not in ("EUR", None):
@@ -139,12 +144,19 @@ def _median(xs):
 
 
 def fresh_obs(con, product_key: str, basis: str, max_age_h: float | None = None) -> list[tuple[float, str]]:
-    """Raw fresh (price, title) observations of ONE basis for a key — for callers that need quantiles."""
+    """Raw fresh (price, title) observations of ONE basis for a key — for callers that need quantiles.
+    Same hygiene as comps(): partial units dropped, same-title-same-price relists collapsed."""
     age = max_age_h if max_age_h is not None else MAX_AGE_H.get(basis, 24)
     cutoff = datetime.fromtimestamp(time.time() - age * 3600, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return [(r[0], r[1] or "") for r in con.execute(
-        "SELECT price_eur, title FROM price_obs WHERE product_key=? AND source=? AND observed_at>=?",
-        (product_key, basis, cutoff))]
+    out, seen = [], set()
+    for r in con.execute("SELECT price_eur, title FROM price_obs WHERE product_key=? AND source=? AND observed_at>=?",
+                         (product_key, basis, cutoff)):
+        sig = ((r[1] or "").strip().lower(), round(r[0], 0))
+        if sig in seen or PARTIAL_RE.search(r[1] or ""):
+            continue
+        seen.add(sig)
+        out.append((r[0], r[1] or ""))
+    return out
 
 
 def comps(con, product_key: str | None, basis: str = "ebay_sold", *, min_obs: int = MIN_OBS,
@@ -158,9 +170,18 @@ def comps(con, product_key: str | None, basis: str = "ebay_sold", *, min_obs: in
         return None
     age = max_age_h if max_age_h is not None else MAX_AGE_H.get(basis, 24)
     cutoff = datetime.fromtimestamp(time.time() - age * 3600, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = con.execute("SELECT price_eur, observed_at FROM price_obs WHERE product_key=? AND source=? AND observed_at>=?",
+    rows = con.execute("SELECT price_eur, observed_at, title FROM price_obs WHERE product_key=? AND source=? AND observed_at>=?",
                        (product_key, basis, cutoff)).fetchall()
-    prices = [r[0] for r in rows]
+    # collapse relists: the same title at the same price is ONE market signal, not n (measured Sat: one
+    # multi-quantity eBay listing "AirPods Pro 2. Generation USB-C" appeared 5× at €75 and set the median)
+    seen: set[tuple[str, float]] = set()
+    prices = []
+    for r in rows:
+        sig = ((r[2] or "").strip().lower(), round(r[0], 0))
+        if sig in seen or PARTIAL_RE.search(r[2] or ""):
+            continue
+        seen.add(sig)
+        prices.append(r[0])
     if prices:
         m0 = _median(prices)
         prices = [p for p in prices if m0 / 3 <= p <= m0 * 3]
@@ -170,10 +191,15 @@ def comps(con, product_key: str | None, basis: str = "ebay_sold", *, min_obs: in
             con.commit()
         return None
     med = _median(prices)
-    mad = _median([abs(p - med) for p in prices]) or 1.0
+    raw_mad = _median([abs(p - med) for p in prices])
+    # MAD floor: per-model sold samples are tight (measured Sat: MAD 3-12% of median vs 9-57% for mixed
+    # family comps) and small-n MAD underestimates real per-unit spread (condition, storage, battery).
+    # Unfloored, a €400 PS5 vs a €450 median scores z=3.6 => price_too_good; floored (10%) z=1.1.
+    mad = max(raw_mad, med * float(os.environ.get("MEM_MAD_FLOOR_RATIO", "0.10")), 1.0)
     newest = max(r[1] for r in rows)
     age_h = (time.time() - datetime.fromisoformat(newest.replace("Z", "+00:00")).timestamp()) / 3600
-    out = {"median": round(med, 2), "mad": round(mad, 2), "n": len(prices), "basis": basis.replace("ebay_", ""),
+    out = {"median": round(med, 2), "mad": round(mad, 2), "raw_mad": round(raw_mad, 2), "n": len(prices),
+           "basis": basis.replace("ebay_", ""),
            "source": "memory", "product_key": product_key, "age_h": round(max(age_h, 0.0), 1)}
     if record:
         out["lookup_ms"] = round(_lookup(con, "comps", True, t0, f"{product_key}|{basis}|n={len(prices)}"), 3)
@@ -218,16 +244,18 @@ def cadence(con, query: str, hour_local: int, *, days: int = 7) -> dict:
     last `days` (Laplace-smoothed toward 'something new'); expected-new-per-fetch ≥ 0.5 => 5 min, falling
     toward the 60-min cap as the hour proves empty. Fewer than 3 observations => 5 min (no evidence, no skip)."""
     since = datetime.fromtimestamp(time.time() - days * 86400, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    r = con.execute("SELECT COUNT(*) n, COALESCE(SUM(n_new),0) new FROM fetches WHERE search_query=? AND hour_local=? "
-                    "AND fetched_at>=?", (query, hour_local, since)).fetchone()
-    n, new = r["n"], r["new"]
-    if n < 3:
+    r = con.execute("SELECT COUNT(*) n, COALESCE(SUM(n_new),0) new, COUNT(DISTINCT substr(fetched_at,1,10)) days "
+                    "FROM fetches WHERE search_query=? AND hour_local=? AND fetched_at>=?", (query, hour_local, since)).fetchone()
+    n, new, days = r["n"], r["new"], r["days"]
+    if n < 6:
         return {"interval_s": CADENCE_MIN_S, "why": f"only {n} fetches seen at {hour_local:02d}h — default", "rate": None}
+    # evidence-bounded: one day of history may stretch to 30 min at most; 60 min needs ≥2 distinct days
+    cap = CADENCE_MAX_S if days >= 2 else min(CADENCE_MAX_S, 1800)
     rate = (new + 0.5) / (n + 1)                          # expected new listings per fetch
-    interval = CADENCE_MIN_S if rate >= 0.5 else min(CADENCE_MAX_S, int(CADENCE_MIN_S * 0.5 / max(rate, 1e-3)))
+    interval = CADENCE_MIN_S if rate >= 0.5 else min(cap, int(CADENCE_MIN_S * 0.5 / max(rate, 1e-3)))
     interval = max(CADENCE_MIN_S, (interval // 60) * 60)
     return {"interval_s": interval, "rate": round(rate, 3),
-            "why": f"{new} new in {n} fetches at {hour_local:02d}h (7d) → every {interval // 60} min"}
+            "why": f"{new} new in {n} fetches at {hour_local:02d}h ({days}d) → every {interval // 60} min"}
 
 
 def due(con, query: str, now_ts: float | None = None) -> tuple[bool, dict]:
@@ -243,7 +271,10 @@ def due(con, query: str, now_ts: float | None = None) -> tuple[bool, dict]:
     if last["n_new"] > 0:
         c = {**c, "interval_s": CADENCE_MIN_S, "why": f"last fetch had {last['n_new']} new → hot, 5 min"}
     since = now_ts - datetime.fromisoformat(last["fetched_at"].replace("Z", "+00:00")).timestamp()
-    return since >= c["interval_s"] - 5, {**c, "since_s": int(since)}
+    # slack: fetched_at is stamped AFTER the Apify call returns, the next due-check runs BEFORE the next call,
+    # so a 5-min cadence on a 5-min loop measures ~4.5 min. Without slack every hot query would skip a cycle.
+    slack = min(60, c["interval_s"] * 0.2)
+    return since >= c["interval_s"] - slack, {**c, "since_s": int(since)}
 
 
 # ---------------------------------------------------------------- feedback (memory of corrections)

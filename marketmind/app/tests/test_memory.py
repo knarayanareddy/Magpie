@@ -76,9 +76,20 @@ check(store.ingest_ebay(con, [{"title": "Apple iPhone 14 128GB Ersatzteil/Defekt
                                 "itemId": "edef", "endedAt": NOW.strftime("%Y-%m-%d")}], basis="ebay_sold", product_key="iphone 14") == 0,
       "defect/parts sale never enters memory")
 check(store.ingest_ebay(con, sold, basis="ebay_sold", product_key="iphone 14") == 0, "eBay ingest idempotent (UNIQUE source+ref)")
+# partial units + relists (both measured live Sat on 'airpods pro 2')
+ap = [{"title": "Apple AirPods Pro 2 USB-C Rechts A3049 Original Ersatz", "soldPrice": "44", "soldCurrency": "EUR", "itemId": "a1",
+       "endedAt": NOW.strftime("%Y-%m-%d")}] + \
+     [{"title": "AirPods Pro 2. Generation USB-C", "soldPrice": "75", "soldCurrency": "EUR", "itemId": f"r{i}",
+       "endedAt": NOW.strftime("%Y-%m-%d")} for i in range(5)] + \
+     [{"title": f"Apple AirPods Pro 2 compleet {i}", "soldPrice": str(p), "soldCurrency": "EUR", "itemId": f"c{i}",
+       "endedAt": NOW.strftime("%Y-%m-%d")} for i, p in enumerate([95, 106, 110, 119])]
+check(store.ingest_ebay(con, ap, basis="ebay_sold", product_key="airpods pro 2") == 9, "single-earbud 'Rechts Ersatz' sale never ingested")
+ca = store.comps(con, "airpods pro 2", "ebay_sold", record=False)
+check(ca and ca["n"] == 5 and ca["median"] == 106, f"5 identical €75 relists count once: n=5, median €106 (not €75) ({ca})")
 c = store.comps(con, "iphone 14", "ebay_sold")
 check(c and c["n"] == 5 and c["median"] == 235 and c["source"] == "memory" and c["basis"] == "sold",
       f"memory comps: 3×-median outlier (€2400 lot) trimmed, n=5, median €235 ({c})")
+check(c["raw_mad"] == 5.0 and c["mad"] == 23.5, f"MAD floored at 10% of median (raw €{c['raw_mad']} → €{c['mad']})")
 check(store.comps(con, "iphone 14", "ebay_ask") is None, "sold obs never answer an asking-price request (no basis mixing)")
 check(store.comps(con, "iphone 14 pro", "ebay_sold") is None, "1 obs < MIN_OBS => None => caller scrapes (fail-closed)")
 check(store.comps(con, "iphone 14", "ebay_sold", max_age_h=1) is None, "stale obs (older than max age) never answer")
@@ -106,6 +117,11 @@ night, evening = store.cadence(con, q, 3), store.cadence(con, q, 19)
 check(night["interval_s"] == store.CADENCE_MAX_S, f"empty hour learned: 03h → {night['interval_s'] // 60} min ({night['why']})")
 check(evening["interval_s"] == store.CADENCE_MIN_S, f"busy hour stays hot: 19h → {evening['interval_s'] // 60} min")
 check(store.cadence(con, "brand-new-query", 3)["interval_s"] == store.CADENCE_MIN_S, "no evidence => default 5 min (never skips blindly)")
+for k in range(8):                                    # one single day of empty evidence at 05h
+    con.execute("INSERT INTO fetches(search_query, fetched_at, hour_local, n_fetched, n_new, cost_usd, run_ref) VALUES (?,?,?,?,?,?,?)",
+                ("oneday", iso(NOW - timedelta(minutes=k * 5)), 5, 10, 0, 0.015, f"od{k}"))
+con.commit()
+check(store.cadence(con, "oneday", 5)["interval_s"] == 1800, "one day of evidence caps the stretch at 30 min (60 needs ≥2 days)")
 check(all(store.CADENCE_MIN_S <= store.cadence(con, q, h)["interval_s"] <= store.CADENCE_MAX_S for h in range(24)), "interval always within [5, 60] min")
 con.execute("INSERT INTO fetches(search_query, fetched_at, hour_local, n_fetched, n_new, cost_usd, run_ref) VALUES (?,?,?,?,?,?,?)",
             (q, iso(NOW - timedelta(minutes=6)), 3, 10, 1, 0.015, "hot"))

@@ -53,8 +53,16 @@ def main() -> int:
         con.commit()
 
     listings_actor = os.environ.get("APIFY_ACTOR_LISTINGS", "haketa/marktplaats-scraper")
+    # once the live loop ingests directly (meta.live_ingest_since), its runs must NOT be replayed here:
+    # a second fetch row per run (n_new=0, listings already known) would bias the learned cadence toward "quiet"
+    row = con.execute("SELECT v FROM meta WHERE k='live_ingest_since'").fetchone()
+    live_since = row[0] if row else None
     for r in runs(listings_actor, a.since):
         if r["id"] in done:
+            stats["skipped_runs"] += 1
+            continue
+        if live_since and r["startedAt"] >= live_since:
+            mark(r["id"], listings_actor)          # covered by live ingest
             stats["skipped_runs"] += 1
             continue
         items = get(f"/datasets/{r['defaultDatasetId']}/items?clean=true&omit=images,attributes,description")
