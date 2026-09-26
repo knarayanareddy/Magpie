@@ -47,6 +47,13 @@ def reset_cycle_stats() -> dict:
     return snap
 
 
+def _bump(con, key: str, n: int) -> None:
+    """Persistent counters in meta (survive restarts) — the 'after' side of the before/after benchmark."""
+    con.execute("INSERT OR IGNORE INTO meta(k, v) VALUES (?, '0')", (key,))
+    con.execute("UPDATE meta SET v = CAST(CAST(v AS INTEGER) + ? AS TEXT) WHERE k = ?", (int(n), key))
+    con.commit()
+
+
 # ---------------------------------------------------------------- cadence (before fetching)
 
 def due_queries(queries: list[str], mode: str) -> tuple[list[str], dict]:
@@ -64,6 +71,8 @@ def due_queries(queries: list[str], mode: str) -> tuple[list[str], dict]:
             (due.append(q) if ok else None)
         _STATS["cadence_fetched"] += len(due)
         _STATS["cadence_skipped"] += len(queries) - len(due)
+        _bump(con, "cadence_skipped_total", len(queries) - len(due))
+        _bump(con, "cadence_planned_total", len(queries))
         return due, why
     except Exception:
         _warn("cadence")

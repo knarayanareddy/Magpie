@@ -15,12 +15,51 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
+import os  # noqa: E402
+if (APP / ".env").exists():                     # MP_TECH_QUERIES for the before/after query set (no secrets read out)
+    for _l in (APP / ".env").read_text().splitlines():
+        if _l.startswith("MP_TECH_QUERIES="):
+            os.environ.setdefault("MP_TECH_QUERIES", _l.split("=", 1)[1].strip())
 from mm.memory import db, store  # noqa: E402
 
 
 def pct(xs, q):
     s = sorted(xs)
     return round(s[min(len(s) - 1, int(len(s) * q))], 3) if s else None
+
+
+def before_after(con) -> dict:
+    """Split at meta.live_ingest_since (the moment the loop started using memory). BEFORE = fixed 5-min
+    fetching (backfilled from Apify run history, measured cost); AFTER = learned cadence (live ingest,
+    estimated cost). Per-hour rates normalise for different window lengths. Honest: 'after' needs hours of
+    data before it means anything — n_hours is printed so nobody over-reads a 20-minute window."""
+    row = con.execute("SELECT v FROM meta WHERE k='live_ingest_since'").fetchone()
+    if not row:
+        return {"status": "no live memory ingest yet"}
+    t = row[0]
+    import os
+    queries = [q.strip() for q in os.environ.get("MP_TECH_QUERIES", "").split(",") if q.strip()] or \
+              [r[0] for r in con.execute("SELECT DISTINCT search_query FROM fetches WHERE search_query<>''")]
+    qmarks = ",".join("?" * len(queries))
+
+    def side(op: str) -> dict:
+        # fair comparison: configured queries only, and each query's FIRST-ever fetch excluded (cold start:
+        # everything is 'new' on first sight — 102 of Saturday's 157 'new' came from 11h cold starts)
+        r = con.execute(f"SELECT COUNT(*) runs, COALESCE(SUM(n_new),0) new, COALESCE(SUM(cost_usd),0) usd, "
+                        f"MIN(fetched_at) a, MAX(fetched_at) b FROM fetches f WHERE search_query IN ({qmarks}) "
+                        f"AND fetched_at {op} ? AND fetched_at > (SELECT MIN(fetched_at) FROM fetches g "
+                        f"WHERE g.search_query = f.search_query)", (*queries, t)).fetchone()
+        if not r["runs"]:
+            return {"runs": 0}
+        span_h = max((datetime.fromisoformat(r["b"].replace("Z", "+00:00")) -
+                      datetime.fromisoformat(r["a"].replace("Z", "+00:00"))).total_seconds() / 3600, 5 / 60)
+        return {"runs": r["runs"], "new": r["new"], "usd": round(r["usd"], 3), "hours": round(span_h, 2),
+                "runs_per_hour": round(r["runs"] / span_h, 2), "new_per_hour": round(r["new"] / span_h, 2),
+                "runs_per_new": round(r["runs"] / max(r["new"], 1), 2), "usd_per_new": round(r["usd"] / max(r["new"], 1), 4)}
+    meta = {r[0]: r[1] for r in con.execute("SELECT k, v FROM meta WHERE k LIKE 'cadence_%_total'")}
+    return {"split_at": t, "queries": queries, "before_fixed_5min": side("<"), "after_learned_cadence": side(">="),
+            "cadence_skipped_total": int(meta.get("cadence_skipped_total", 0)),
+            "cadence_planned_total": int(meta.get("cadence_planned_total", 0))}
 
 
 def main() -> int:
@@ -64,6 +103,7 @@ def main() -> int:
         "product_keys": {r["method"]: {"titles": r["n"], "hits": r["hits"]} for r in kc},
         "learned_cadence_min": sched,
         "projected_runs_saved_per_day_vs_fixed_5min": saved,
+        "before_after": before_after(con),
         "store": {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
                   for t in ("listings", "price_obs", "verdicts", "fetches", "feedback", "product_keys")},
     }
