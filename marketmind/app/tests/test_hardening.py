@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Hero-run hardening tests: notifier debounce, pHash re-post guard, listing grounding, kill-switch race.
+Offline except the optional live pHash probe (set PHASH_LIVE=1)."""
+from __future__ import annotations
+import json, os, sys, tempfile
+from pathlib import Path
+
+APP = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP))
+from mm import decide, notify, phash, rerank, state as state_mod  # noqa: E402
+
+fails: list[str] = []
+
+
+def check(cond: bool, msg: str) -> None:
+    print(f"{'✓' if cond else '✗'} {msg}")
+    if not cond:
+        fails.append(msg)
+
+
+# 1. notifier: silence on routine cycles, debounce errors, drafts + kill-switch push
+with tempfile.TemporaryDirectory() as td:
+    dg = Path(td) / "digest.txt"
+    dg.write_text("digest body")
+    n = notify.Notifier(send=None)
+    n.last_morning = notify._now().date()          # morning already sent today
+    base = {"counts": {"skipped": 1, "escalated": 3, "drafted": 0, "pursued_auto": 0}, "paused": False}
+    n.cycle(base, dg)
+    check(n.sent == [], "routine escalate-only cycle sends nothing")
+    n.cycle({**base, "error": "feed empty"}, dg)
+    check(n.sent == [], "single transient feed error is debounced")
+    n.cycle({**base, "error": "feed empty"}, dg)
+    check(len(n.sent) == 1 and "failing 2 cycles" in n.sent[-1], "2nd consecutive error alerts once")
+    n.cycle({**base, "error": "feed empty"}, dg)
+    check(len(n.sent) == 1, "3rd error does not re-alert")
+    n.cycle(base, dg)
+    check("recovered" in n.sent[-1], "recovery line after error streak")
+    n.cycle({**base, "counts": {**base["counts"], "drafted": 1}}, dg)
+    check(n.sent[-1].startswith("📝") and "digest body" in n.sent[-1], "drafted cycle pushes digest")
+    n.cycle({**base, "paused": True}, dg)
+    check("kill-switch ON" in n.sent[-1], "kill-switch transition pushed")
+    check(n.totals["escalated"] == 21, f"totals accumulate for morning summary ({n.totals['escalated']})")
+    boom = notify.Notifier(send=lambda t: (_ for _ in ()).throw(RuntimeError("net down")))
+    boom.armed("live", "v0", 300)
+    check(True, "send failure does not raise into the loop")
+
+# 2. pHash: dHash math, allowlist, near-dup detection
+check(phash._allowed("https://evil.example.com/a.jpg") is None, "pHash refuses non-CDN host (Art XII.1)")
+check(phash._allowed("http://images.marktplaats.com/a.jpg") is None, "pHash refuses plain http")
+check(phash._allowed("//images.marktplaats.com/api/x.jpg") == "https://images.marktplaats.com/api/x.jpg",
+      "pHash accepts protocol-relative CDN url")
+check(phash.item_hash({"images": ["switch_a.jpg"]}) is None, "fixture (non-URL) image => None, fail-open")
+idx: dict = {}
+phash.remember("ffff0000ffff0000", idx, "a1")
+check(phash.find_duplicate("ffff0000ffff0001", idx, "b2") == "a1", "hamming 1 => duplicate of prior id")
+check(phash.find_duplicate("0000ffff0000ffff", idx, "b2") is None, "distant hash => not duplicate")
+check(phash.find_duplicate("ffff0000ffff0000", idx, "a1") is None, "same listing id is not its own dup")
+if phash.backend():
+    import io
+    try:
+        from PIL import Image
+        im = Image.new("RGB", (64, 48))
+        for x in range(64):
+            for y in range(48):
+                im.putpixel((x, y), (x * 4, y * 5, (x + y) * 2))
+        b1 = io.BytesIO(); im.save(b1, "JPEG", quality=95)
+        b2 = io.BytesIO(); im.resize((128, 96)).save(b2, "JPEG", quality=60)   # re-post: rescaled + recompressed
+        h1, h2 = phash.dhash_bytes(b1.getvalue()), phash.dhash_bytes(b2.getvalue())
+        check(h1 is not None and phash.hamming(h1, h2) <= phash.DUP_MAX_HAMMING,
+              f"rescaled+recompressed copy stays within threshold (d={phash.hamming(h1, h2) if h1 and h2 else '?'})")
+    except ImportError:
+        pass
+if os.environ.get("PHASH_LIVE") == "1":
+    raw = json.loads(Path("/tmp/mp_raw.json").read_text())
+    hs = [phash.item_hash({"images": r["images"]}) for r in raw[:6]]
+    check(sum(h is not None for h in hs) >= 4, f"live CDN photos hash ({sum(h is not None for h in hs)}/6)")
+
+# 3. grounding: service/part listings never grounded against device comps; honest reason codes
+comps = {"iphone": {"median": 450.0, "mad": 50.0}, "nintendo switch": {"median": 190.0, "mad": 21.0}}
+repair = {"id": "r", "title": "iPhone Achterkant Back glas vervangen Goedkoop Zwolle", "price_eur": 55.0, "description": ""}
+f = decide.facts_for(repair, comps)
+d = decide.decide(repair, f)
+check(f["margin_z"] is None and d.action == "escalate" and d.reasons == ["not_device"],
+      f"repair listing: no device comps, escalate not_device ({d.action} {d.reasons})")
+bid = {"id": "b", "title": "iPhone 14 128GB Starlight", "price_eur": 0.0, "description": ""}
+d = decide.decide(bid, decide.facts_for(bid, comps))
+check(d.action == "escalate" and d.reasons == ["no_price"], f"'Bieden' €0 => escalate no_price ({d.reasons})")
+ok = {"id": "o", "title": "Nintendo Switch V2 met Mario Kart", "price_eur": 150.0, "description": ""}
+d = decide.decide(ok, decide.facts_for(ok, comps))
+check(d.action == "pursue" and d.reasons == ["ok"], f"genuine device still pursues ({d.action} {d.reasons})")
+unk = {"id": "u", "title": "Obscure tin toy", "price_eur": 20.0, "description": ""}
+d = decide.decide(unk, decide.facts_for(unk, comps))
+check(d.reasons == ["no_comps"], "unknown item keeps no_comps (watchlist-recoverable)")
+check(not rerank.is_non_device_listing("MacBook Air M1 met oplader"), "bundle 'met oplader' stays a device")
+
+# 4. kill-switch race: phone pause written mid-cycle survives the loop's next save
+with tempfile.TemporaryDirectory() as td:
+    p = Path(td) / "state.json"
+    loop = state_mod.State(p); loop.save()               # loop process holds state in memory
+    phone = state_mod.State(p); phone.pause(); phone.save()  # /magpie_pause from Telegram
+    check(loop.paused(), "loop sees phone pause on next item (re-read)")
+    loop.mark_seen("x"); loop.save()
+    check(json.loads(p.read_text())["paused"] is True, "loop save does not clobber phone pause")
+    phone2 = state_mod.State(p); phone2.resume(); phone2.save()
+    check(not loop.paused(), "loop sees phone resume")
+
+print(f"\nHARDENING TESTS: {'PASS' if not fails else 'FAIL ' + str(fails)}")
+sys.exit(1 if fails else 0)

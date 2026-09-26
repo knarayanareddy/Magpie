@@ -26,7 +26,7 @@ if env_file.exists():
             os.environ.setdefault(k.strip(), v.strip())
 
 from mm import (act, browser_act, costs as costs_mod, decide, expand, export,  # noqa: E402
-                health, inbound, jev, judge, notice, receipts, reddit_intel, report,  # noqa: E402
+                health, inbound, jev, judge, notice, notify, phash, receipts, reddit_intel, report,  # noqa: E402
                 rerank, state as state_mod, triage, watchlist)  # noqa: E402
 
 
@@ -101,14 +101,41 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
             listings.append(r_item)
 
     rows, drafts, deduped = [], [], 0
+    # pHash precompute (T09): hash first photo of NEW items in parallel; bytes only from image CDN allowlist
+    phash_index = st.data.setdefault("phash", {})
+    hashed_ids = {v["id"] for v in phash_index.values()} | set(st.data.setdefault("phash_none", []))
+    to_hash = [it for it in listings if it["id"] not in hashed_ids]   # new items + backfill of seen ones
+    item_hashes: dict = {}
+    if to_hash and phash.backend():
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            item_hashes = dict(zip((it["id"] for it in to_hash), ex.map(phash.item_hash, to_hash)))
+        st.data["phash_none"] = (st.data["phash_none"] + [i for i, h in item_hashes.items() if h is None])[-2000:]
     for item in listings:
         is_revisit = item["id"] in revisit_ids
         if st.is_seen(item["id"]) and not is_revisit:
             deduped += 1
+            if item_hashes.get(item["id"]):   # backfill: index already-seen photos so their re-posts are caught
+                phash.remember(item_hashes[item["id"]], phash_index, item["id"])
             continue
         revisit_ids.discard(item["id"])
         st.mark_seen(item["id"])
         r = receipts.begin(item)
+
+        # pHash RE-POST GUARD — same photo under a new listing id => never a second offer (fail-closed)
+        ph = item_hashes.get(item["id"])
+        if ph:
+            prior = phash.find_duplicate(ph, phash_index, item["id"])
+            phash.remember(ph, phash_index, item["id"])
+            if prior:
+                item["duplicate_photo"] = 1.0
+                row_committed = receipts.commit(r, "escalate", ["duplicate_photo"], "escalated", "T0", gate,
+                                                scores={"phash": ph, "phash_prior": prior},
+                                                policy_branch="prefilter:phash")
+                rows.append(row_committed)
+                receipts.write(OUT / "receipts.jsonl", [row_committed])
+                st.save()
+                continue
 
         # HEALTH PRE-FILTER — deterministic, no LLM (Darko improvement #1)
         comp_k = decide._comps_key(item.get("title", ""), comps)
@@ -181,6 +208,7 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
         receipts.write(OUT / "receipts.jsonl", [row_committed])
         st.save()
 
+    st.save()  # persist pHash backfill + watchlist revisits even on all-deduped cycles
     h1 = st.h1()
     learned = f"H1 accepted {h1['accepted']}/{h1['offers']} · H2 not-run" if h1["offers"] else "unmeasured (H1 0/0 · H2 not-run)"
     timing = f"{meta['cycle_time_s']}s source-read ({meta.get('timing_note', 'live measured')})"
@@ -595,11 +623,15 @@ if __name__ == "__main__":
         print(f"=== MAGPIE AUTONOMOUS LOOP STARTED ===")
         print(f"Mode: {a.mode} | Gate: {a.gate} | Interval: {interval}s | Max cycles: {max_c or 'infinite'}")
         print(f"Kill switch: AUTO_PAUSE=1 or 'python3 run_walking_skeleton.py --pause'")
+        notifier = notify.Notifier(send=None if not notify.enabled() else report.send_live)
+        print(f"Telegram notify: {'on' if notify.enabled() else 'off (TELEGRAM_* unset or NOTIFY_TELEGRAM=0)'}")
+        notifier.armed(a.mode, a.gate, interval)
         try:
             while True:
                 cycle_t0 = time.time()
                 print(f"\n--- [CYCLE {cycle}] {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} ---")
                 s = run(a.mode, a.gate, a.only, a.out)
+                notifier.cycle(s, out_path / "digest.txt")
                 health_info = {
                     "last_cycle": cycle,
                     "last_run_id": s.get("run_id"),
@@ -612,6 +644,7 @@ if __name__ == "__main__":
                 health_file.write_text(json.dumps(health_info, indent=2), encoding="utf-8")
                 if max_c and cycle >= max_c:
                     print(f"\nReached max cycles ({max_c}). Exiting loop cleanly.")
+                    notifier.stopped(f"max cycles {max_c}")
                     break
                 elapsed = time.time() - cycle_t0
                 sleep_secs = max(5.0, interval - elapsed)
@@ -620,6 +653,7 @@ if __name__ == "__main__":
                 cycle += 1
         except KeyboardInterrupt:
             print("\nAutonomous loop terminated by user.")
+            notifier.stopped("terminated by user")
             sys.exit(0)
     s = run(a.mode, a.gate, a.only, a.out)
     if s.get("error"):
