@@ -1,0 +1,126 @@
+{
+  "captured_at": "2026-09-26T12:50Z",
+  "note": "same 8 families, same hour; asking = automation-lab/ebay-scraper (DE), sold = caffein.dev/ebay-sold-listings (ebay.de, 30d, used, defects+successor models excluded)",
+  "families": {
+    "nintendo switch": {
+      "asking": {
+        "median": 209.0,
+        "mad": 50.99,
+        "n": 14,
+        "source": "automation-lab/ebay-scraper [DE]"
+      },
+      "sold": {
+        "median": 115.0,
+        "mad": 31.97,
+        "n": 17,
+        "source": "caffein.dev/ebay-sold-listings [ebay.de, sold 30d, used]"
+      },
+      "delta_pct": -45
+    },
+    "ps5": {
+      "asking": {
+        "median": 549.0,
+        "mad": 51.0,
+        "n": 13,
+        "source": "automation-lab/ebay-scraper [DE]"
+      },
+      "sold": {
+        "median": 450.0,
+        "mad": 39.9,
+        "n": 13,
+        "source": "caffein.dev/ebay-sold-listings [ebay.de, sold 30d, used]"
+      },
+      "delta_pct": -18
+    },
+    "ps4": {
+      "asking": {
+        "median": 105.99,
+        "mad": 20.0,
+        "n": 13,
+        "source": "automation-lab/ebay-scraper [DE]"
+      },
+      "sold": {
+        "median": 119.49,
+        "mad": 38.08,
+        "n": 8,
+        "source": "caffein.dev/ebay-sold-listings [ebay.de, sold 30d, used]"
+      },
+      "delta_pct": 13
+    },
+    "macbook": {
+      "asking": {
+        "median": 329.0,
+        "mad": 129.0,
+        "n": 15,
+        "source": "automation-lab/ebay-scraper [DE]"
+      },
+      "sold": {
+        "median": 467.0,
+        "mad": 267.0,
+        "n": 23,
+        "source": "caffein.dev/ebay-sold-listings [ebay.de, sold 30d, used]"
+      },
+      "delta_pct": 42
+    },
+    "iphone": {
+      "asking": {
+        "median": 197.0,
+        "mad": 122.4,
+        "n": 11,
+        "source": "automation-lab/ebay-scraper [DE]"
+      },
+      "sold": {
+        "median": 260.0,
+        "mad": 49.0,
+        "n": 16,
+        "source": "caffein.dev/ebay-sold-listings [ebay.de, sold 30d, used]"
+      },
+      "delta_pct": 32
+    },
+    "airpods": {
+      "asking": {
+        "median": 119.0,
+        "mad": 49.0,
+        "n": 8,
+        "source": "automation-lab/ebay-scraper [DE]"
+      },
+      "sold": {
+        "median": 75.0,
+        "mad": 17.1,
+        "n": 17,
+        "source": "caffein.dev/ebay-sold-listings [ebay.de, sold 30d, used]"
+      },
+      "delta_pct": -37
+    },
+    "apple watch": {
+      "asking": {
+        "median": 110.0,
+        "mad": 40.0,
+        "n": 15,
+        "source": "automation-lab/ebay-scraper [DE]"
+      },
+      "sold": {
+        "median": 250.0,
+        "mad": 80.0,
+        "n": 13,
+        "source": "caffein.dev/ebay-sold-listings [ebay.de, sold 30d, used]"
+      },
+      "delta_pct": 127
+    },
+    "canon": {
+      "asking": {
+        "median": 118.99,
+        "mad": 29.34,
+        "n": 15,
+        "source": "automation-lab/ebay-scraper [DE]"
+      },
+      "sold": {
+        "median": 178.0,
+        "mad": 62.0,
+        "n": 25,
+        "source": "caffein.dev/ebay-sold-listings [ebay.de, sold 30d, used]"
+      },
+      "delta_pct": 50
+    }
+  }
+}
