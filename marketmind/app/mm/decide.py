@@ -25,11 +25,18 @@ class Decision:
 
 def facts_for(item: dict, comps: dict) -> dict:
     key = _comps_key(item["title"], comps)
+    note = None
+    if key and rerank.is_non_device_listing(item.get("title", "")):
+        key, note = None, "not_device"          # repair service / part / accessory ≠ device comps
+    elif key and not item.get("price_eur"):
+        note = "no_price"                       # 'Bieden' with no ask: comps exist, margin can't
     c = comps.get(key, {}) if key else {}
     mz = skin.margin_z(item.get("price_eur"), c.get("median"), c.get("mad"))
     return {
         "margin_z": mz,
         "comps": c or None,                       # None => fail closed: no_comps
+        "comps_key": key,
+        "grounding_note": note,
         "duplicate_photo": float(item.get("duplicate_photo") or 0.0),
         "offplatform_payment_request": bool(ADVANCE_FEE_RE.search(item.get("description", ""))),
         "text": (item.get("title", "") + " " + item.get("description", ""))[:2000],
@@ -42,10 +49,15 @@ def decide(item: dict, facts: dict, gate: str = "v0") -> Decision:
         res = skin.gate_v0(facts)                       # 3 rules, zero models (M0 legal gate)
     else:
         res = skin.gate_v1(item.get("judge_answers"), facts)
+    reasons = list(res.reason_codes)
+    # Honest labels only: the gate already chose escalate (action unchanged); say WHY grounding failed.
+    # not_device / no_price are non-recoverable, so they don't bloat the no_comps watchlist.
+    if res.action.value == "escalate" and reasons == ["no_comps"] and facts.get("grounding_note"):
+        reasons = [facts["grounding_note"]]
     tier = "T1" if facts.get("is_mine") else config.tier_for(item.get("category", "other"))
     if item.get("price_eur", 0) > config.DEAL_EUR_AUTO_CEILING:
         tier = "T3"
-    return Decision(item["id"], res.action.value, list(res.reason_codes), tier, facts, gate)
+    return Decision(item["id"], res.action.value, reasons, tier, facts, gate)
 
 
 def _comps_key(title: str, comps: dict) -> str | None:

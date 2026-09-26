@@ -56,3 +56,21 @@ def filter_grounded_comps(target_title: str, candidate_comps: list[dict], min_co
         if conf >= min_confidence:
             grounded.append({**c, "relevance_confidence": conf})
     return grounded
+
+
+# Listing-side guard (buy side): a keyword hit like "iphone" in a REPAIR SERVICE or PART listing
+# must not be grounded against device comps — that yields bogus margin_z (e.g. €55 back-glass repair
+# vs €450 iPhone median => "pursue"). Word-boundary match; Dutch + English + German terms.
+# Bundle words (oplader/hoesje/case/achterkant) deliberately excluded: 'MacBook met oplader' is a device;
+# a lone cheap accessory still fails closed via margin_z > 2.5 => price_too_good.
+NON_DEVICE_LISTING_RE = re.compile(
+    r"\b(reparatie|reparaties|repareren|repair|reparatur|vervangen|vervanging|onderdel(en)?|onderdeel|"
+    r"parts?|scherm\s*reparatie|accu\s*vervangen|batterij\s*vervangen|screenprotector|"
+    r"gezocht|zoek(e|ende)?|inkoop|wij\s*kopen|opkoper|te\s*huur|huren|lessen|cursus|installeren|service)\b",
+    re.I,
+)
+
+
+def is_non_device_listing(title: str) -> bool:
+    """True when the listing title is a service, part, accessory or wanted-ad rather than the device."""
+    return bool(NON_DEVICE_LISTING_RE.search(title or ""))
