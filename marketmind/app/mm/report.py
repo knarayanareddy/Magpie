@@ -39,6 +39,8 @@ def render(run_id: str, rows: list[dict], drafts: list[dict], timing: str,
         lines.append("acted:")
         lines.append(f"  DRAFT  {d['listing_id']:22} offer €{d['offer_eur']} "
                      f"({d['offer_ratio']*100:.0f}% of ask, round {d['counter_round']+1}/{d['max_counter_rounds']+1})")
+        if d.get("calc"):
+            lines.append(f"         {d['calc']}")
     if scanned == 0:
         lines.append("empty feed — check APIFY_ACTOR_LISTINGS / quota (WIRING §1)")
     if n("escalated") > 0:
@@ -55,14 +57,26 @@ def render(run_id: str, rows: list[dict], drafts: list[dict], timing: str,
     return "\n".join(lines)
 
 
-def send_live(text: str) -> None:
-    import json, os, urllib.request
+def send_live(text: str) -> int | None:
+    """Send to Telegram; returns the message_id (delivery receipt) and appends it to out/telegram_log.jsonl."""
+    import json, os, time, urllib.request
+    from pathlib import Path
     token, chat = os.environ["TELEGRAM_BOT_TOKEN"], os.environ["TELEGRAM_CHAT_ID"]
     body = json.dumps({"chat_id": chat, "text": text}).encode()
     req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage",
                                  data=body, headers={"Content-Type": "application/json"})
     try:
-        urllib.request.urlopen(req, timeout=30)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            mid = (json.load(r).get("result") or {}).get("message_id")
     except Exception as e:
         # never leak the token-bearing path in a traceback (audit C4)
         raise RuntimeError(f"telegram send failed: {type(e).__name__} (details redacted)") from None
+    try:
+        log = Path(__file__).resolve().parent.parent / "out" / "telegram_log.jsonl"
+        with open(log, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message_id": mid,
+                                 "source": "python-loop", "first_line": text.splitlines()[0][:80]},
+                                ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+    return mid

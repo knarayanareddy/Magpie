@@ -28,6 +28,8 @@ def facts_for(item: dict, comps: dict) -> dict:
     note = None
     if key and rerank.is_non_device_listing(item.get("title", "")):
         key, note = None, "not_device"          # repair service / part / accessory ≠ device comps
+    elif key and rerank.generation_mismatch(key, item.get("title", "")):
+        key, note = None, "model_mismatch"      # e.g. iPhone 11 vs iPhone 13-15 comps
     elif key and not item.get("price_eur"):
         note = "no_price"                       # 'Bieden' with no ask: comps exist, margin can't
     c = comps.get(key, {}) if key else {}

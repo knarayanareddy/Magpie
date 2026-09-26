@@ -1,6 +1,6 @@
 """NOTICE — real-world data in (Apify in live mode, fixtures in sim). Never fetches seller-supplied URLs (Art XII.1)."""
 from __future__ import annotations
-import json, os, time, urllib.error, urllib.request
+import json, os, re, time, urllib.error, urllib.request
 from pathlib import Path
 from . import rerank
 
@@ -112,7 +112,12 @@ def _load_comps_live(token: str) -> dict:
         ("canon", "canon eos kamera camera", 60),
     ]
     all_comps = {}
+    basis = os.environ.get("COMPS_BASIS", "sold").lower()
+    if basis == "sold":
+        all_comps = _load_sold_comps(token, marketplace)
     for comp_key, query, min_price in queries:
+        if comp_key in all_comps:
+            continue  # sold comps found for this family; asking prices only as labelled fallback
         body = json.dumps({
             "searchQueries": [query],
             "marketplace": marketplace,
@@ -136,7 +141,8 @@ def _load_comps_live(token: str) -> dict:
             "median": round(med, 2),
             "mad": round(mad, 2),
             "n": len(prices),
-            "source": f"{actor} [{marketplace}]"
+            "source": f"{actor} [{marketplace}]",
+            "basis": "asking",
         }
 
     if all_comps:
@@ -147,6 +153,50 @@ def _load_comps_live(token: str) -> dict:
             pass
 
     return all_comps
+
+
+# SOLD comps (completed sales, last 30 days, used condition) — the honest price basis for margin_z.
+# Keywords are plain device names (eBay ANDs every word). Per-family exclusions drop successor models
+# (Switch 2 is ~2.5x a Switch) and defect/parts sales; Art III: seller fields are never read.
+SOLD_FAMILIES = [
+    ("nintendo switch", "nintendo switch konsole", 50, r"switch\s*2|lite"),
+    ("ps5", "playstation 5 konsole", 150, r"\bslim\b.*\bpro\b|\bportal\b"),
+    ("ps4", "playstation 4 konsole", 40, r"\bps5\b|playstation\s*5"),
+    ("macbook", "apple macbook air", 150, r"\bintel\b.*\b201[0-6]\b"),
+    ("iphone", "iphone 14", 150, r"iphone\s*1[1235]\b|\bpro\s*max\b"),
+    ("airpods", "apple airpods pro", 40, r"\bcase\s*only|\bnur\s*(case|ladecase)\b|einzeln|links|rechts"),
+    ("apple watch", "apple watch series", 50, r"armband|band\s*only"),
+    ("canon", "canon eos kamera", 80, r"objektiv\s*only|nur\s*objektiv"),
+]
+DEFECT_RE = re.compile(r"defekt|defect|bastler|bastel|ersatzteil|for parts|ohne funktion|kaputt|gesperrt|icloud", re.I)
+
+
+def _load_sold_comps(token: str, marketplace: str) -> dict:
+    actor = os.environ.get("APIFY_ACTOR_SOLD", "caffein.dev/ebay-sold-listings")
+    site = {"DE": "ebay.de", "FR": "ebay.fr", "IT": "ebay.it", "ES": "ebay.es", "UK": "ebay.co.uk"}.get(marketplace, "ebay.de")
+    count = int(os.environ.get("SOLD_COMPS_PER_FAMILY", "25"))
+    out = {}
+    for comp_key, keyword, min_price, exclude in SOLD_FAMILIES:
+        body = json.dumps({"keywords": [keyword], "ebaySite": site, "daysToScrape": 30, "count": count,
+                           "itemCondition": "used", "minPrice": min_price,
+                           "includeCompletedListings": False}).encode()
+        try:
+            raw = _apify_post(token, actor, body)
+        except Exception:
+            continue
+        ex = re.compile(exclude, re.I)
+        cands = [{"title": i.get("title", ""), "price": _safe_float(i.get("soldPrice"))} for i in raw
+                 if i.get("soldPrice") and (i.get("soldCurrency") in (None, "EUR"))
+                 and not DEFECT_RE.search(i.get("title", "")) and not ex.search(i.get("title", ""))]
+        grounded = rerank.filter_grounded_comps(comp_key, cands, min_confidence=0.70)
+        prices = sorted(c["price"] for c in grounded if c["price"] >= min_price * 0.5)
+        if len(prices) < 5:          # too thin to be a market price => leave to fallback / no_comps
+            continue
+        med = prices[len(prices) // 2]
+        mad = sorted(abs(p - med) for p in prices)[len(prices) // 2] or 1.0
+        out[comp_key] = {"median": round(med, 2), "mad": round(mad, 2), "n": len(prices),
+                         "source": f"{actor} [{site}, sold 30d, used]", "basis": "sold"}
+    return out
 
 
 def _normalize(raw: dict) -> dict:

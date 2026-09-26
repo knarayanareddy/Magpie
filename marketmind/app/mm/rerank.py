@@ -71,6 +71,29 @@ NON_DEVICE_LISTING_RE = re.compile(
 )
 
 
+# "accessory FOR a device" ("Case voor iPhone 14", "oplader for MacBook") — unlike a bundle ("met oplader")
+ACCESSORY_FOR_RE = re.compile(r"\b(case|hoes(je)?|cover|oplader|lader|kabel|screen\s*protector|skin|tas|houder|dock)\s+(voor|for|für)\b", re.I)
+
+
 def is_non_device_listing(title: str) -> bool:
     """True when the listing title is a service, part, accessory or wanted-ad rather than the device."""
-    return bool(NON_DEVICE_LISTING_RE.search(title or ""))
+    return bool(NON_DEVICE_LISTING_RE.search(title or "") or ACCESSORY_FOR_RE.search(title or ""))
+
+
+# Model guard: a comps family must not price a different model/generation
+# ("iPhone 11 €150" vs iPhone 13-15 comps; "Switch Lite" vs full-Switch sold prices) => bogus pursue.
+# Mirror in n8n price node (GENS / FAMILY_EXCLUDE).
+COMPS_GENERATIONS = {"iphone": {"13", "14", "15"}}
+_GEN_RE = re.compile(r"\biphone\s*(\d{1,2})\b", re.I)
+FAMILY_EXCLUDE = {"nintendo switch": re.compile(r"\b(lite|switch\s*2)\b", re.I)}
+
+
+def generation_mismatch(comps_key: str | None, title: str) -> bool:
+    ex = FAMILY_EXCLUDE.get(comps_key or "")
+    if ex and ex.search(title or ""):
+        return True
+    gens = COMPS_GENERATIONS.get(comps_key or "")
+    if not gens:
+        return False
+    m = _GEN_RE.search(title or "")
+    return bool(m) and m.group(1) not in gens
