@@ -89,3 +89,18 @@ python3 marketmind/app/tests/test_gate_parity.py
   3. **Action:** Genuine margin opportunity noticed, grounded comps calculated, Dutch offer drafted.
   4. **Assisted:** Human review via Telegram / CLI `--confirm`, signed receipt emitted.
   5. **Close:** H1/H2 learning ledger updated, unit economics cost line reported.
+
+---
+
+## 14. Reference Resources
+
+Use these for context when building n8n workflows, Apify integrations, and the orchestration layer:
+
+- **n8n MCP server:** https://github.com/czlonkowski/n8n-mcp — MCP for building n8n workflows programmatically
+- **n8n Skills:** https://github.com/czlonkowski/n8n-skills — skillset for building flawless n8n workflows
+- **Apify n8n Nodes:** https://github.com/apify/n8n-nodes-apify — official Apify nodes for n8n
+- **Thread:** https://x.com/tomcrawshaw01/status/2011804665147449652
+- **Ref:** https://t.co/bY1c8D4amz
+- **Ref:** https://t.co/0LqslJzct6
+
+**Focus:** European classifieds (Marktplaats NL). Comps should target eBay.nl / EU markets, not eBay.com USD.

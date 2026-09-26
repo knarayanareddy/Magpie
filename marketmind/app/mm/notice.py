@@ -33,8 +33,8 @@ def load(mode: str, measure: bool = False) -> tuple[list[dict], dict]:
         if not token or not actor:
             missing = ", ".join(k for k in ("APFY_TOKEN", "APIFY_ACTOR_LISTINGS") if not os.environ.get(k))
             raise MMFeedError(f"{missing} missing — copy app/env.example to app/.env (WIRING §1)")
-        body = json.dumps({"search": "nintendo switch OR canon lens OR ps4 OR ps5 OR polaroid",
-                           "maxItems": 25}).encode()
+        body = json.dumps({"search": "nintendo switch OR playstation ps5 OR macbook pro OR iphone OR canon camera OR airpods OR apple watch",
+                           "maxItems": 50}).encode()
         try:
             listings = [_normalize(x) for x in _apify_post(token, actor, body)]
         except MMFeedError:
@@ -64,19 +64,34 @@ def _load_comps_live(token: str) -> dict:
     actor = os.environ.get("APIFY_ACTOR_COMPS", "")
     if not actor:
         return {}
-    body = json.dumps({"query": "nintendo switch v2 sold", "maxItems": 40, "sold": True}).encode()
-    try:
-        items = _apify_post(token, actor, body)
-    except Exception:
-        return {}  # missing grounding => decide() will fail closed to no_comps
-    prices = sorted(_safe_float(i.get("price_eur") or i.get("price")) for i in items
-                    if i.get("price_eur") or i.get("price"))
-    prices = [p for p in prices if p > 0]
-    if not prices:
-        return {}
-    med = prices[len(prices) // 2]
-    mad = sorted(abs(p - med) for p in prices)[len(prices) // 2] or 1.0
-    return {"nintendo switch": {"median": med, "mad": mad, "n": len(prices), "source": actor}}
+    USD_TO_EUR = 0.92  # approximate; eBay.com returns USD, Marktplaats is EUR
+    # Target categories aligned with the search query — each gets its own median/MAD
+    queries = [
+        ("nintendo switch", "nintendo switch v2 sold"),
+        ("ps5", "playstation 5 ps5 console sold"),
+        ("macbook", "macbook pro sold"),
+        ("iphone", "iphone 15 sold"),
+        ("canon", "canon camera lens sold"),
+        ("airpods", "airpods pro sold"),
+        ("apple watch", "apple watch sold"),
+    ]
+    all_comps = {}
+    for comp_key, query in queries:
+        body = json.dumps({"searchQueries": [query], "maxItems": 20}).encode()
+        try:
+            items = _apify_post(token, actor, body)
+        except Exception:
+            continue  # missing grounding => decide() will fail closed to no_comps
+        prices = sorted(_safe_float(i.get("price")) * USD_TO_EUR for i in items
+                        if i.get("price"))
+        prices = [p for p in prices if p > 0]
+        if not prices:
+            continue
+        med = prices[len(prices) // 2]
+        mad = sorted(abs(p - med) for p in prices)[len(prices) // 2] or 1.0
+        all_comps[comp_key] = {"median": round(med, 2), "mad": round(mad, 2),
+                               "n": len(prices), "source": actor}
+    return all_comps
 
 
 def _normalize(raw: dict) -> dict:
