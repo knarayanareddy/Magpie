@@ -223,8 +223,24 @@ def _load_sold_comps(token: str, marketplace: str) -> dict:
     return out
 
 
+def _own_registry() -> tuple[set[str], set[str]]:
+    """The reseller's OWN accounts/listings (out/own_accounts.json, gitignored, written by tools/import_own_ads.py).
+    Own-account ids are the named human's own identity (Art III: we never profile OTHER sellers; recognising
+    our own listings is what keeps the loop from 'noticing' and drafting an offer on the reseller's own ad)."""
+    p = Path(os.environ.get("OWN_ACCOUNTS_FILE") or Path(__file__).resolve().parent.parent / "out" / "own_accounts.json")
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+        return {str(x) for x in d.get("seller_ids", [])}, {str(x) for x in d.get("listing_ids", [])}
+    except Exception:
+        return set(), set()
+
+
 def _normalize(raw: dict) -> dict:
     """Map actor output -> canonical item (shape documented in WIRING.md §1)."""
+    own_sellers, own_listings = _own_registry()
+    lid = str(raw.get("listingId") or "")
+    mine = bool(raw.get("is_mine", False)) or (lid and lid in own_listings) or \
+        (raw.get("sellerId") is not None and str(raw.get("sellerId")) in own_sellers)
     return {
         "id": raw.get("id") or raw.get("url", "")[-24:],
         "url": raw.get("url", ""),
@@ -235,5 +251,5 @@ def _normalize(raw: dict) -> dict:
         "images": (raw.get("images") or [])[:3],
         "seller": raw.get("seller") or {},
         "posted_at": raw.get("posted_at") or "",
-        "is_mine": bool(raw.get("is_mine", False)),
+        "is_mine": bool(mine),
     }

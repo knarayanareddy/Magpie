@@ -137,6 +137,10 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
         st.mark_seen(item["id"])
         r = receipts.begin(item)
 
+        # OWN LISTING — the reseller's own ad is never a buy candidate. It continues to the T1 own-account path
+        # (edit_own_price on stale listings, allowlisted), which never drafts an offer; `own_listing` is receipted
+        # so the triage view shows why. Own-account recognition: out/own_accounts.json (tools/import_own_ads.py).
+
         # DUPLICATE-PHOTO GUARD (dHash) — same photo under a new listing id => escalate, never a 2nd offer
         ph = item_hashes.get(item["id"])
         if ph:
@@ -206,6 +210,10 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
                     run_costs.add_judge()
 
         d = decide.decide(item, facts, gate=gate)
+        if item.get("is_mine") and d.action != "pursue":
+            # own ad judged as a buy deal is meaningless (no_margin / price_too_good on your own price):
+            # label it honestly; the sell co-pilot owns it. Pursue-eligible own ads still go to T1 reprice below.
+            d.action, d.reasons, d.tier = "skip", ["own_listing"], "T1"
         state_name, extra = None, {}
         if d.action == "skip":
             state_name = "skipped"

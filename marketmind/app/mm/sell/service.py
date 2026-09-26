@@ -153,7 +153,8 @@ def set_price(item_id: str, d: Path, *, ask: int, floor: int) -> dict:
     if not it.get("facts"):
         raise PermissionError(f"{item_id}: confirm the item before pricing (identity first)")
     it["price"] = {**(it.get("price") or {}), "status": "ok", "ask": int(ask), "floor": int(floor), "basis": "human"}
-    it["status"] = "priced"
+    if it["status"] not in ("posted", "drafted"):          # repricing a live listing keeps it live
+        it["status"] = "priced"
     _remember("price_override", item_id, proposed={k: (it.get("price") or {}).get(k) for k in ("median", "n")},
               corrected={"ask": int(ask), "floor": int(floor)}, product_key=(it.get("facts") or {}).get("product_key"))
     receipt(d, item_id, "pursued_assisted", ["human_price_override"], actor="human", policy_branch="sell:price",

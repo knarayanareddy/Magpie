@@ -59,6 +59,22 @@ with tempfile.TemporaryDirectory() as td:
     check(mn.sent and "9/12 listing fetches skipped" in mn.sent[-1] and "6 decisions on memory comps" in mn.sent[-1],
           f"morning summary reports memory savings ({(mn.sent or [''])[-1].splitlines()[1:2]})")
 
+# 1b. own accounts: the reseller's own ads are recognised (by listing id or own-account id) and never become buy
+#     candidates; a stranger's ad is untouched. Registry = out/own_accounts.json (gitignored).
+with tempfile.TemporaryDirectory() as td:
+    import json as _json, os as _os
+    from mm import notice as _notice
+    reg = Path(td) / "own.json"
+    reg.write_text(_json.dumps({"seller_ids": ["111"], "listing_ids": ["m2445378351"]}))
+    _os.environ["OWN_ACCOUNTS_FILE"] = str(reg)
+    own_by_id = _notice._normalize({"listingId": "m2445378351", "sellerId": "999", "title": "MacBook Pro 16", "price": 2799})
+    own_by_acct = _notice._normalize({"listingId": "m1", "sellerId": 111, "title": "Beixo vouwfiets", "price": 400})
+    stranger = _notice._normalize({"listingId": "m2", "sellerId": "222", "title": "iPhone 14", "price": 300})
+    del _os.environ["OWN_ACCOUNTS_FILE"]
+    check(own_by_id["is_mine"] and own_by_acct["is_mine"] and not stranger["is_mine"],
+          "own ads recognised by listing id AND own-account id; a stranger's ad is not")
+    check("sellerId" not in own_by_acct and own_by_acct.get("seller") == {}, "canonical item carries no seller id (Art III)")
+
 # 2. duplicate-photo signal (dHash): math, allowlist, redirects, near-dup detection, retry window
 check(phash._allowed("https://evil.example.com/a.jpg") is None, "pHash refuses non-CDN host (Art XII.1)")
 check(phash._allowed("http://images.marktplaats.com/a.jpg") is None, "pHash refuses plain http")
