@@ -71,6 +71,7 @@ The pipeline is done and self-tested in **sim** mode (`app/run_walking_skeleton.
 ## 5) Browser-Use (T07 — acting)
 - **M0 default = draft-assist** (no key needed): the offer is composed, written to `app/out/drafts/`, and pushed to Telegram with [approve] — human presses Send. `action_state: drafted → pursued_assisted` on confirm. (`drafted ≠ sent`, Art VII.2.)
 - Optional live path later: `BROWSER_USE_KEY` + allowlist (send message · edit own price · bump own listing — nothing else, Art XII.1).
+- **Built Sat 26 Sep (US-11): local Playwright actuator instead of Browser-Use cloud** (no key, no LLM in the browser). Setup: `python3 -m pip install --user playwright && python3 -m playwright install chromium`; one-time login of the **dedicated demo account**: `python3 tools/actuator_login.py` (you type the password in the Chromium window; the session is stored in `out/actuator/profile/`, gitignored). Use: `python3 act.py request bump|price|message …` → `approve <token>` (or phone `/magpie_act_approve`) → `run <token>` (dry-run) → `ACT_LIVE=1 python3 act.py run <token> --live --headed`. Fallback: `act.py fallback <token>`.
 
 ## 6) First live run (Friday 25 Sep evening — Run #1 hard gate by midnight)
 ```

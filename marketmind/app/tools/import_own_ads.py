@@ -219,7 +219,10 @@ def main() -> int:
     t0 = time.time()
     found = find_ads(targets)
     own = json.loads(OWN.read_text()) if OWN.exists() else {"seller_ids": [], "listing_ids": [], "accounts": {}}
+    own.setdefault("urls", {})
     for m, it in found.items():
+        if str(it.get("url", "")).startswith("https://www.marktplaats.nl/v/"):
+            own["urls"][m] = it["url"]                   # public ad URL from the pinned feed (US-11 provenance)
         sid = str(it.get("sellerId") or "")
         if sid and sid not in own["seller_ids"]:
             own["seller_ids"].append(sid)
@@ -239,9 +242,11 @@ def main() -> int:
                     lid = str(it.get("listingId") or "")
                     if str(it.get("sellerId") or "") in own["seller_ids"] and lid not in targets and lid not in discovered:
                         discovered[lid] = it
-        for lid in discovered:
+        for lid, it in discovered.items():
             if lid not in own["listing_ids"]:
                 own["listing_ids"].append(lid)
+            if str(it.get("url", "")).startswith("https://www.marktplaats.nl/v/"):
+                own["urls"][lid] = it["url"]
     OWN.parent.mkdir(parents=True, exist_ok=True)
     OWN.write_text(json.dumps(own, indent=2))
 

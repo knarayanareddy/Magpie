@@ -244,6 +244,9 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
                     drafts.append({**draft, "listing_id": item["id"], "calc": calc})
                     (OUT / "drafts").mkdir(exist_ok=True)
                     (OUT / "drafts" / f"{item['id']}.txt").write_text(draft["text_nl"])
+                    # US-11 provenance: the feed URL this draft targets (actuator refuses any other URL)
+                    if str(item.get("url", "")).startswith("https://www.marktplaats.nl/v/"):
+                        (OUT / "drafts" / f"{item['id']}.url").write_text(item["url"])
                 else:
                     state_name = "escalated"
                     d.reasons = d.reasons + ["over_cap" if not draft else "tier_t3"]
