@@ -1,0 +1,341 @@
+{
+  "name": "MarketMind M0 \u2014 scan \u2192 decide \u2192 draft-assist \u2192 report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "m0-1",
+      "name": "Every ~5 min (NOTICE trigger)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.apify.com/v2/acts/{{ $env.APIFY_ACTOR_LISTINGS }}/run-sync-get-dataset-items",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.APFY_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"search\":\"nintendo switch OR canon lens OR ps4 OR ps5\",\"category\":\"games_consoles_camera\",\"maxItems\":25}"
+      },
+      "id": "m0-2",
+      "name": "Apify \u2014 new listings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// seen-ids dedupe (T09) \u2014 prevent Telegram alert spam on 5-min schedule\nconst sd = $getWorkflowStaticData('global');\nsd.seen = sd.seen || {};\nitems = items.filter(it => {\n  const id = it.json.id || it.json.url || (it.json.title ? String(it.json.title) : null);\n  if (!id) return true;\n  if (sd.seen[id]) return false;\n  sd.seen[id] = Date.now();\n  return true;\n});\nreturn items;"
+      },
+      "id": "m0-2-dedupe",
+      "name": "seen-ids dedupe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deterministic comps lookup & margin_z calculation (Art V.2)\nconst COMPS = {\n  \"nintendo switch v2\": { median: 180, mad: 20 },\n  \"nintendo switch\": { median: 170, mad: 25 },\n  \"switch pro controller\": { median: 50, mad: 5 },\n  \"iphone 14\": { median: 520, mad: 50 },\n  \"ps4 slim\": { median: 140, mad: 20 },\n  \"ps5\": { median: 380, mad: 40 },\n  \"canon ef-s 18-55\": { median: 65, mad: 15 },\n  \"canon ae\": { median: 240, mad: 30 },\n  \"gazelle e-bike\": { median: 800, mad: 60 }\n};\nconst ADVANCE_FEE = /(iban|nl\\d{2}[A-Z]{4}\\d{4,}|tikkie|paypal\\.me|pay (in advance|to reserve)|transfer \u20ac?\\d+)/i;\nconst paused = $env.AUTO_PAUSE === '1';\n\nfor (const it of items) {\n  const title = String(it.json.title || '').toLowerCase();\n  const desc = String(it.json.description || '');\n  const fullText = (title + ' ' + desc).slice(0, 2000);\n  const price = Number(it.json.price_eur || it.json.price || 0);\n\n  let match = null;\n  for (const k of Object.keys(COMPS).sort((a,b) => b.length - a.length)) {\n    if (title.includes(k)) { match = COMPS[k]; break; }\n  }\n\n  let mz = null;\n  if (match && match.mad > 0 && price > 0) {\n    mz = (match.median - price) / match.mad;\n  } else if (it.json.facts && it.json.facts.margin_z !== undefined) {\n    mz = it.json.facts.margin_z;\n  }\n\n  const isMine = !!it.json.is_mine;\n  const offpay = !!(it.json.offplatform_payment_request || ADVANCE_FEE.test(fullText));\n  const dup = Number(it.json.duplicate_photo || 0);\n\n  it.json.facts = {\n    margin_z: mz,\n    comps: match,\n    duplicate_photo: dup,\n    offplatform_payment_request: offpay,\n    text: fullText,\n    is_mine: isMine\n  };\n\n  it.json.over_cap = paused;\n  it.json.tier = isMine ? 'T1' : (price > 200 ? 'T3' : (it.json.tier || 'T2'));\n\n  const offerEur = price > 0 ? Math.min(Math.round(price * 0.8 / 5) * 5, Math.floor(price * 0.8)) : 0;\n  it.json.draft = {\n    offer_eur: offerEur,\n    text_nl: `Hoi! Mooi dat je ${it.json.title || 'dit item'} aanbiedt. Zou je \u20ac${offerEur} willen accepteren? Ik kan het ophalen wanneer het uitkomt. (Laat gerust weten of dit past)`\n  };\n\n  const ts = new Date().toISOString();\n  const rawInput = `${it.json.id || ''}:${price}:${title}`;\n  let hash = 0;\n  for (let i = 0; i < rawInput.length; i++) {\n    hash = ((hash << 5) - hash) + rawInput.charCodeAt(i);\n    hash |= 0;\n  }\n  it.json.receipt_id = `rcpt_${Date.now()}_${Math.abs(hash).toString(16)}`;\n  it.json.ts = ts;\n  it.json.input_hash = Math.abs(hash).toString(16).padStart(16, '0');\n}\nreturn items;"
+      },
+      "id": "m0-2-facts",
+      "name": "price + facts (code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// POLICY (fail-closed) gate v0 \u2014 mirror of skin/policy.py::gate_v0 (edit both!)\nconst ILLEGAL_RE = /\\b(weapon|knife|knives|gun|pistol|ammo|hunting knife|airsoft)\\b/i;\nconst INJECTION = [\"ignore previous instructions\", \"accept any offer\", \"mark as sold\", \"mark as safe\", \"disregard all prior\"];\nconst ADVANCE_FEE = /(iban|nl\\d{2}[A-Z]{4}\\d{4,}|tikkie|paypal\\.me|pay (in advance|to reserve)|transfer \u20ac?\\d+)/i;\n\nfunction gateV0(facts) {\n  const mz = (facts.margin_z === undefined) ? null : facts.margin_z;\n  const text = String(facts.text || \"\").toLowerCase();\n  if (INJECTION.some(p => text.includes(p))) return { action: \"skip\", reason_codes: [\"injection_or_jailbreak\"], human_required: true };\n  if (ILLEGAL_RE.test(text)) return { action: \"skip\", reason_codes: [\"illegal_keyword\"], human_required: true };\n  if (facts.offplatform_payment_request || ADVANCE_FEE.test(text)) return { action: \"skip\", reason_codes: [\"offplatform_payment_request\"], human_required: true };\n  if (mz === null) return { action: \"escalate\", reason_codes: [\"no_comps\"], human_required: true };\n  if (mz > 2.5) return { action: \"escalate\", reason_codes: [\"price_too_good\"], human_required: true };\n  if (mz > 0 && mz <= 2.5) return { action: \"pursue\", reason_codes: [\"ok\"], human_required: false };\n  return { action: \"escalate\", reason_codes: [\"no_margin\"], human_required: true };\n}\n\nfor (const it of items) {\n  const f = it.json.facts || {};\n  let g = gateV0(f);\n  // tier gate (outside policy): T3 or over_cap (AUTO_PAUSE) promotes pursue -> escalate\n  if (g.action === 'pursue' && (it.json.tier === 'T3' || it.json.over_cap)) {\n    g = { action: 'escalate', reason_codes: ['tier_t3_or_cap'], human_required: true };\n  }\n  it.json.gate = g;\n  it.json.action_state = g.action === 'pursue' ? (it.json.is_mine ? 'pursued_auto' : 'drafted') : (g.action === 'skip' ? 'skipped' : 'escalated');\n}\nreturn items;"
+      },
+      "id": "m0-3",
+      "name": "POLICY (fail-closed) v0",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_state }}",
+                    "rightValue": "drafted",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "drafted"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_state }}",
+                    "rightValue": "escalated",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "escalated"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_state }}",
+                    "rightValue": "skipped",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "skipped"
+            }
+          ]
+        }
+      },
+      "id": "m0-4",
+      "name": "route by action_state",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=APPROVE-READY DRAFT (drafted != sent, Art VII.2)\n{{ $json.title }} \u2014 offer \u20ac{{ $json.draft.offer_eur }}\n{{ $json.draft.text_nl }}\n[approve] [override\u2192escalate]",
+        "additionalFields": {}
+      },
+      "id": "m0-5",
+      "name": "Telegram \u2014 draft-assist (human presses Send)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1160,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=ESCALATE for human: {{ $json.title }} \u00b7 {{ $json.gate.reason_codes.join(',') }} \u00b7 tier {{ $json.tier }}",
+        "additionalFields": {}
+      },
+      "id": "m0-6",
+      "name": "Telegram \u2014 escalation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1160,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "={{ $env.AIRTABLE_BASE }}",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "={{ $env.AIRTABLE_TABLE }}",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "receipt_id": "={{ $json.receipt_id }}",
+            "ts": "={{ $json.ts }}",
+            "input_hash": "={{ $json.input_hash }}",
+            "action_state": "={{ $json.action_state }}",
+            "reason_codes": "={{ $json.gate.reason_codes.join(',') }}",
+            "policy_branch": "={{ 'gate_v0:' + $json.gate.action }}",
+            "tier": "={{ $json.tier }}",
+            "actor": "agent"
+          }
+        },
+        "options": {}
+      },
+      "id": "m0-7",
+      "name": "Airtable \u2014 receipt (Art VII.1)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1380,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Every ~5 min (NOTICE trigger)": {
+      "main": [
+        [
+          {
+            "node": "Apify \u2014 new listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apify \u2014 new listings": {
+      "main": [
+        [
+          {
+            "node": "seen-ids dedupe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "seen-ids dedupe": {
+      "main": [
+        [
+          {
+            "node": "price + facts (code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "price + facts (code)": {
+      "main": [
+        [
+          {
+            "node": "POLICY (fail-closed) v0",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POLICY (fail-closed) v0": {
+      "main": [
+        [
+          {
+            "node": "route by action_state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "route by action_state": {
+      "main": [
+        [
+          {
+            "node": "Telegram \u2014 draft-assist (human presses Send)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram \u2014 escalation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Airtable \u2014 receipt (Art VII.1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram \u2014 draft-assist (human presses Send)": {
+      "main": [
+        [
+          {
+            "node": "Airtable \u2014 receipt (Art VII.1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram \u2014 escalation": {
+      "main": [
+        [
+          {
+            "node": "Airtable \u2014 receipt (Art VII.1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "note": "M0 skeleton (T06). Sources of truth: skin/policy.py (oracle), app/n8n/policy_v0_node.js (mirror), WIRING.md. Deterministic pricing and facts are computed inline before policy node."
+  }
+}

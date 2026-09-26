@@ -1,0 +1,17 @@
+CONSENT — MarketMind named reseller (Constitution Article III)
+==============================================================
+
+I, ____________________________ (full name), consent to being the named
+reseller user of MarketMind at Build Weekend (Prosus, 25–27 Sep 2026):
+
+- Name:        ____________________________
+- Role:        reseller (Marktplaats / eBay)
+- Organisation (optional): ____________________________
+- Marketplace account I allow the agent to operate (own account): ______________
+- Demo scope:  the agent may manage MY listings and send capped offers on my
+  behalf (max 5/night). I remain the contracting party. It never moves money.
+
+Signed: ____________________   Date: ____________
+
+If unsigned at kickoff, chrome shows `for named reseller unset` and the demo
+runs on public data + own accounts only (Art III.3). NO FAKE CUSTOMERS.

@@ -1,0 +1,7 @@
+{
+  "nintendo switch v2": {"median": 180, "mad": 20, "n": 36, "source": "apify/ebay-scraper sold", "fetched_at": "2026-09-25T18:00:00Z"},
+  "switch pro controller": {"median": 50, "mad": 5, "n": 22, "source": "apify/ebay-scraper sold", "fetched_at": "2026-09-25T18:00:00Z"},
+  "iphone 14": {"median": 520, "mad": 50, "n": 40, "source": "apify/ebay-scraper sold", "fetched_at": "2026-09-25T18:00:00Z"},
+  "gazelle e-bike": {"median": 800, "mad": 60, "n": 15, "source": "apify/ebay-scraper sold", "fetched_at": "2026-09-25T18:00:00Z"},
+  "canon ae": {"median": 240, "mad": 30, "n": 9, "source": "apify/ebay-scraper sold", "fetched_at": "2026-09-25T18:00:00Z"}
+}

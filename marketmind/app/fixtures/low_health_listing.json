@@ -1,0 +1,16 @@
+{
+  "id": "mm-junk-01",
+  "url": "https://www.marktplaats.nl/example/junk",
+  "title": "thing",
+  "description": "",
+  "price_eur": 5,
+  "category": "other",
+  "images": [],
+  "seller": {"name": "xxx123", "since": "2026", "rating_count": 0},
+  "posted_at": "2026-09-10T00:00:00Z",
+  "hostile": false,
+  "expected_health_below": 25,
+  "expected_action": "skip",
+  "expected_reason": "low_health",
+  "_note": "Brand new account, no photos, no description, suspicious price. Should be filtered before LLM."
+}

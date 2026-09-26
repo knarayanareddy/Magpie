@@ -1,0 +1,14 @@
+{
+  "skin": "marketmind",
+  "version": "1.0",
+  "note": "Closed set. Adding a bucket = spec change first (Art V.1). Invented labels coerce to unknown.",
+  "buckets": [
+    {"id": "ok", "label": "OK", "meaning": "ordinary resale listing, nothing rule-relevant detected", "default": "pursue-eligible"},
+    {"id": "weapon", "label": "WEAPON", "meaning": "weapons, knives sold as weapons, arms", "default": "skip"},
+    {"id": "animal", "label": "ANIMAL", "meaning": "live animals / banned trade", "default": "skip"},
+    {"id": "counterfeit", "label": "COUNTERFEIT", "meaning": "replicas, fakes, 'AAA quality' branded goods", "default": "skip"},
+    {"id": "pii", "label": "PII/PHISHING", "meaning": "personal data harvesting, off-platform payment bait, advance-fee", "default": "skip"},
+    {"id": "other_illegal", "label": "OTHER-ILLEGAL", "meaning": "stolen-goods signals, recalled/restricted, misc. illegal", "default": "skip"},
+    {"id": "unknown", "label": "UNKNOWN", "meaning": "model abstain, missing data, invented label (fail-closed)", "default": "escalate"}
+  ]
+}
