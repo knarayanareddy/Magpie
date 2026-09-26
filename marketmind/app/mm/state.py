@@ -33,11 +33,20 @@ class State:
 
     def pause(self) -> None:
         self.data["paused"] = True
+        self._kill_set = True
 
     def resume(self) -> None:
         self.data["paused"] = False
+        self._kill_set = True
 
     def paused(self) -> bool:
+        # Re-read the kill switch from disk: a phone /magpie_pause written mid-cycle by another
+        # process must take effect on the very next item, not after the cycle (Art VII.3).
+        if not getattr(self, "_kill_set", False) and self.path.exists():
+            try:
+                self.data["paused"] = bool(json.loads(self.path.read_text()).get("paused", self.data["paused"]))
+            except Exception:
+                pass
         return bool(self.data["paused"])
 
     def record_h1(self, accepted: bool, offer_id: str | None = None) -> None:
@@ -73,4 +82,8 @@ class State:
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self.data, indent=2))
+        if not getattr(self, "_kill_set", False):
+            self.paused()  # never clobber a kill switch another process set while we ran
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.data, indent=2))
+        tmp.replace(self.path)  # atomic: a concurrent reader never sees a half-written file
