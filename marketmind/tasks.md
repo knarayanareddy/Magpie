@@ -48,7 +48,8 @@ M1 done-done = T09–T15 green. The Warden vetoes gate commits until then. (Art 
 
 ## Phase 6 — M4 · Enhancements & Stretch (P2 — never at loop expense)
 - [ ] **T26** TF two-knob + €-cost per receipt (Art II.3 / IV.2 `€/listing` column).
-- [ ] **T27** pHash → prior-verdict cache (JEV-style 0-token hits on re-posts).
+- [~] **T27** pHash → prior-verdict cache (JEV-style 0-token hits on re-posts). *(Sat, US-10: `mm/memory` verdict cache built + tested — normalized-text re-post => prior verdict, price drop => re-decide; **loop wiring Sun AM** behind `MEM_COMPS`.)*
+- [~] **T38** *(Sat, US-10)* **Market memory** — `app/mm/memory/` SQLite store (`out/market.db`, WAL, no seller fields): listings (time-on-market), price_obs (mp_ask / ebay_sold / ebay_ask / own_sale, basis never mixed), verdicts, fetches (per-query new-rate ⇒ learned cadence 5–60 min, resets hot on any new listing), feedback (human corrections ⇒ correction hints + key cache), product_keys (deterministic normalizer, 25/25 real titles; JEV `choice` as vetoed, cached proposal). Backfilled from 264 existing Apify runs (dataset reads, $0 compute). **Sell pricing is DB-first now**: 3–15 ms, 0 Apify calls vs 27 s live, identical median/ask/floor on iPhone 14. Sidecar `bin/memory-sync.sh`. Found+fixed via memory cross-check: word-overlap let 14 Pro/Pro Max sales price a plain 14. Metrics: `tools/memory_metrics.py`. **Sun AM:** loop wiring (DB-first comps, verdict cache, cadence) behind flags, then before/after.
 - [ ] **T28** Receipt-pack export (Exhibit-style `exhibit.json`) for Q&A appendix.
 - [ ] **T29** Gold padding toward n≥40 (Art IV floor is n≥8).
 - [ ] **T30** Full three-column benchmark incl. p50 latency row.
