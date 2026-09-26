@@ -41,8 +41,12 @@ def load(mode: str, measure: bool = False) -> tuple[list[dict], dict]:
             ).split(",") if q.strip()
         ]
         max_per_query = max(5, int(os.environ.get("MP_MAX_PER_QUERY", "15")))
-        all_raw = []
-        for q in tech_queries:
+        # US-10 learned cadence: only queries whose learned interval has elapsed cost an Apify run.
+        # Fail-open inside live.due_queries (any error => all queries, legacy behaviour).
+        from .memory import live as mem
+        due, cadence = mem.due_queries(tech_queries, mode)
+        all_raw, fetched_q = [], []
+        for q in due:
             body = json.dumps({
                 "platform": "marktplaats.nl",
                 "query": q,
@@ -50,16 +54,28 @@ def load(mode: str, measure: bool = False) -> tuple[list[dict], dict]:
             }).encode()
             try:
                 items = _apify_post(token, actor, body)
+                for it in items:                      # attribute every item to the query that fetched it
+                    if isinstance(it, dict) and not it.get("searchQuery"):
+                        it["searchQuery"] = q
                 all_raw.extend(items)
+                fetched_q.append(q)
+                mem.ingest(items, mode, queries_fetched=[q])
             except Exception:
                 continue
 
+        if not due:
+            # nothing due by learned cadence: a quiet cycle, NOT a feed error (no alert, no Apify spend)
+            comps = _load_comps_live(token)
+            meta = {"source": f"apify:{actor}", "mode": "live", "cadence": cadence, "queries_fetched": [],
+                    "timing_note": "no query due (learned cadence) — 0 Apify listing runs"}
+            meta["cycle_time_s"] = round(time.perf_counter() - t0, 3)
+            return [], {**meta, "comps": comps}
         if not all_raw:
             raise MMFeedError("marktplaats_scraper_empty: no listings returned from targeted queries")
 
         listings = [_normalize(x) for x in all_raw]
         comps = _load_comps_live(token)
-        meta = {"source": f"apify:{actor}", "mode": "live"}
+        meta = {"source": f"apify:{actor}", "mode": "live", "cadence": cadence, "queries_fetched": fetched_q}
     meta["cycle_time_s"] = round(time.perf_counter() - t0, 3)
     return listings, {**meta, "comps": comps}
 

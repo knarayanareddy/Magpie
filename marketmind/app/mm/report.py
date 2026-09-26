@@ -10,7 +10,7 @@ def render(run_id: str, rows: list[dict], drafts: list[dict], timing: str,
            deduped: int = 0, paused: bool = False, learned: str = "unmeasured",
            outreach_used: int | None = None, error: str = "",
            cost_line: str = "", watchlist_info: str = "",
-           triage_file: str = "") -> str:
+           triage_file: str = "", memory_info: str = "", quiet: bool = False) -> str:
     n = lambda s: sum(1 for r in rows if r["action_state"] == s)          # noqa: E731
     scanned = len(rows)
     refused = [r for r in rows if r["action_state"] in ("skipped", "escalated")][:3]
@@ -30,6 +30,8 @@ def render(run_id: str, rows: list[dict], drafts: list[dict], timing: str,
         lines.append(cost_line)
     if watchlist_info:
         lines.append(watchlist_info)
+    if memory_info:
+        lines.append(memory_info)
     lines.append("refused first:" if refused else "refused first: (none this run)")
     for r in refused:
         word = "SKIP" if r["action_state"] == "skipped" else "ESC "
@@ -41,7 +43,7 @@ def render(run_id: str, rows: list[dict], drafts: list[dict], timing: str,
                      f"({d['offer_ratio']*100:.0f}% of ask, round {d['counter_round']+1}/{d['max_counter_rounds']+1})")
         if d.get("calc"):
             lines.append(f"         {d['calc']}")
-    if scanned == 0:
+    if scanned == 0 and not quiet:
         lines.append("empty feed — check APIFY_ACTOR_LISTINGS / quota (WIRING §1)")
     if n("escalated") > 0:
         tf = triage_file or "out/triage.html"

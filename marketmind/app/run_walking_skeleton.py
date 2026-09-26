@@ -28,6 +28,13 @@ if env_file.exists():
 from mm import (act, browser_act, costs as costs_mod, decide, expand, export,  # noqa: E402
                 health, inbound, jev, judge, notice, notify, phash, receipts, reddit_intel, report,  # noqa: E402
                 rerank, state as state_mod, triage, watchlist)  # noqa: E402
+from mm.memory import live as mem_live  # noqa: E402  (US-10; fail-open, live mode only)
+
+# T27 verdict reuse is limited to CONTENT-driven outcomes: they don't depend on comps, which change.
+# Comps-driven verdicts (no_comps, no_margin, price_too_good, …) are always re-decided; a PURSUE is never
+# replayed — a re-post of something we already acted on escalates for a human instead.
+VERDICT_REUSABLE = {"injection_or_jailbreak", "illegal_keyword", "offplatform_payment_request", "counterfeit",
+                    "not_device", "low_health", "duplicate_photo", "model_mismatch"}   # = policy.py / decide.py codes
 
 
 def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dict:
@@ -37,6 +44,7 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
     if os.environ.get("AUTO_PAUSE", "0") == "1":
         st.pause()  # env kill switch (audit C6 — was documented in env.example but unwired)
     run_costs = costs_mod.RunCosts()
+    mem_live.reset_cycle_stats()
     t = time.perf_counter()
     try:
         listings, meta = notice.load(mode, measure=True)
@@ -144,6 +152,23 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
                 st.save()
                 continue
 
+        # T27 VERDICT CACHE (US-10) — re-post of an already-refused listing: reuse the content verdict, 0 tokens
+        prior_v = mem_live.prior_verdict(item, mode)
+        if prior_v and (prior_v["action"] == "pursue" or set(prior_v["reason_codes"]) & VERDICT_REUSABLE):
+            if prior_v["action"] == "pursue":
+                act_, why, state_ = "escalate", ["repost_of_pursued"], "escalated"
+            else:
+                act_, why = prior_v["action"], list(prior_v["reason_codes"])
+                state_ = "skipped" if act_ == "skip" else "escalated"
+            row_committed = receipts.commit(r, act_, why + ["repost_prior_verdict"], state_, "T0", gate,
+                                            scores={"cache_hit": "verdict", "prior_listing": prior_v["listing_id"],
+                                                    "prior_decided_at": prior_v["decided_at"]},
+                                            policy_branch="cache:verdict")
+            rows.append(row_committed)
+            receipts.write(OUT / "receipts.jsonl", [row_committed])
+            st.save()
+            continue
+
         # HEALTH PRE-FILTER — deterministic, no LLM (Darko improvement #1)
         comp_k = decide._comps_key(item.get("title", ""), comps)
         cat_median = comps[comp_k]["median"] if comp_k and comp_k in comps else None
@@ -153,12 +178,19 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
             row_committed = receipts.commit(r, "skip", ["low_health"], "skipped",
                                             "T0", gate, scores={"health": h_score},
                                             policy_branch="prefilter:health")
+            mem_live.remember_verdict(item, "skip", ["low_health"], gate, mode)
             rows.append(row_committed)
             receipts.write(OUT / "receipts.jsonl", [row_committed])
             st.save()
             continue
 
         facts = decide.facts_for(item, comps)
+        # MEMORY COMPS (US-10) — finer product-key comps (eBay sold, ≥5 fresh obs) over the family comps.
+        # Only facts change; policy.py still decides. Non-device titles never get a key (rules), so the
+        # repair/part/accessory guard is preserved.
+        mem_c = mem_live.item_comps(item, mode) if facts.get("grounding_note") != "not_device" else None
+        if mem_c:
+            facts = mem_live.apply_comps(facts, item, mem_c)
         if gate == "v1":
             if item.get("judge_answers") is None:
                 if judge.available():
@@ -213,8 +245,13 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
             seed = expand.extract_seeds(item, d.action)
             st.add_seed(seed)
 
-        row_committed = receipts.commit(r, d.action, d.reasons, state_name, d.tier, d.gate,
-                                        scores={"margin_z": facts["margin_z"], "health": h_score})
+        sc = {"margin_z": facts["margin_z"], "health": h_score}
+        if facts.get("comps_source") == "memory":
+            c = facts["comps"]
+            sc.update({"cache_hit": "memory", "comps_key": c["product_key"], "comps_n": c["n"],
+                       "comps_basis": c["basis"], "comps_age_h": c["age_h"], "lookup_ms": c.get("lookup_ms")})
+        row_committed = receipts.commit(r, d.action, d.reasons, state_name, d.tier, d.gate, scores=sc)
+        mem_live.remember_verdict(item, d.action, d.reasons, d.gate, mode)
         rows.append(row_committed)
         receipts.write(OUT / "receipts.jsonl", [row_committed])
         st.save()
@@ -229,6 +266,10 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
     expansion_sellers = expand.seller_profiles_to_scrape(st.seed_buffer())
     n_pursued = sum(1 for r in rows if r["action_state"] in ("drafted", "pursued_auto"))
     cost_line = run_costs.summary_line(len(rows), n_pursued, mode=mode)
+    mem_stats = mem_live.reset_cycle_stats()
+    mem_line = mem_live.summary_line(mem_stats)
+    if meta.get("cadence") and not meta.get("queries_fetched") and not listings:
+        mem_line = (mem_line + " · " if mem_line else "memory: ") + "no query due this cycle (learned cadence)"
     wl_pending = len(watchlist.get_pending(st.data))
     wl_info = f"watchlist: {wl_pending} pending · {watchlist_resolved} resolved this cycle" if (wl_pending or watchlist_resolved) else ""
 
@@ -244,7 +285,8 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
                            deduped=deduped, paused=st.paused(), learned=learned,
                            outreach_used=st.outreach_used(),
                            cost_line=cost_line, watchlist_info=wl_info,
-                           triage_file=str(OUT / "triage.html"))
+                           triage_file=str(OUT / "triage.html"), memory_info=mem_line,
+                           quiet=bool(meta.get("cadence")) and not meta.get("queries_fetched"))
     (OUT / "digest.txt").write_text(digest)
     counts = {s: sum(1 for r in rows if r["action_state"] == s)
               for s in ("skipped", "escalated", "drafted", "pursued_auto")}
@@ -271,6 +313,8 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
                    "new_queries": expansion_queries,
                    "seller_profiles": len(expansion_sellers),
                },
+               "memory": {**mem_stats, "cadence": meta.get("cadence") or {},
+                          "queries_fetched": meta.get("queries_fetched")},
                "csv_export": str(csv_file)}
     (OUT / "run-summary.json").write_text(json.dumps(summary, indent=2))
     if not only:
