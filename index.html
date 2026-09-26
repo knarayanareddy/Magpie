@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Magpie · Autonomous European Classifieds Arbitrage Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0a0e17;
+      --bg-card: rgba(18, 24, 38, 0.75);
+      --bg-card-hover: rgba(28, 38, 60, 0.85);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-active: rgba(14, 165, 233, 0.5);
+      --accent-cyan: #06b6d4;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.12) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    /* Glassmorphism helpers */
+    .glass {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+    }
+
+    header {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10, 14, 23, 0.85);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.35);
+    }
+
+    .brand h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 20px;
+      letter-spacing: 0.05em;
+    }
+    .badge-live {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .badge-live::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+      box-shadow: 0 0 8px var(--accent-emerald);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+    }
+
+    .nav-tab {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      transition: all 0.2s ease;
+    }
+    .nav-tab:hover { color: var(--text-main); }
+    .nav-tab.active {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .metrics-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      padding: 24px 32px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .metric-card {
+      padding: 16px 20px;
+      border-radius: 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .metric-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+    .metric-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    .metric-val {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .metric-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-weight: 400;
+    }
+
+    .main-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 32px 64px 32px;
+    }
+
+    /* Workflow Diagram Section */
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+
+    .workflow-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      position: relative;
+      margin-bottom: 40px;
+    }
+
+    @media (max-width: 1024px) {
+      .workflow-grid { grid-template-columns: 1fr; }
+    }
+
+    .stage-card {
+      padding: 24px;
+      border-radius: 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      position: relative;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .stage-card:hover, .stage-card.selected {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 25px rgba(6, 182, 212, 0.15);
+      background: var(--bg-card-hover);
+    }
+    .stage-card.selected::after {
+      content: "";
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 40px;
+      height: 4px;
+      background: var(--accent-cyan);
+      border-radius: 2px;
+    }
+
+    .stage-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .stage-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .stage-title {
+      font-size: 17px;
+      font-weight: 700;
+    }
+    .stage-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+    .stage-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: auto;
+    }
+    .tag {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+    }
+
+    /* Inspector Drawer */
+    .inspector-panel {
+      padding: 28px;
+      border-radius: 16px;
+      margin-bottom: 40px;
+      border: 1px solid var(--border-active);
+      background: rgba(15, 23, 42, 0.85);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      display: none;
+    }
+    .inspector-panel.open { display: block; animation: fadeIn 0.25s ease-out; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .inspector-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .inspector-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 768px) {
+      .inspector-grid { grid-template-columns: 1fr; }
+    }
+
+    .code-block {
+      background: #060911;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #cbd5e1;
+      overflow-x: auto;
+      max-height: 280px;
+    }
+
+    /* Simulator Interactive Playground */
+    .simulator-box {
+      padding: 32px;
+      border-radius: 16px;
+      margin-bottom: 40px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+    }
+    .sim-deals-selector {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .deal-pill {
+      padding: 10px 18px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .deal-pill:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .deal-pill.active {
+      background: rgba(6, 182, 212, 0.15);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+
+    .deal-pipeline-flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      position: relative;
+    }
+    @media (max-width: 900px) {
+      .deal-pipeline-flow { grid-template-columns: 1fr; }
+    }
+    .pipe-step {
+      padding: 20px;
+      border-radius: 14px;
+      background: rgba(10, 14, 23, 0.6);
+      border: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .pipe-step-title {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    .pipe-step-val {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    /* Comps Table */
+    .table-container {
+      overflow-x: auto;
+      border-radius: 14px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 40px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+    th {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 14px 20px;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border-color);
+    }
+    td {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border-color);
+      font-family: var(--font-sans);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+    .mono { font-family: var(--font-mono); }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+    }
+    .status-drafted {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-escalated {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--accent-amber);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .status-skipped {
+      background: rgba(244, 63, 94, 0.15);
+      color: var(--accent-rose);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+    }
+
+    footer {
+      border-top: 1px solid var(--border-color);
+      padding: 32px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    footer a { color: var(--accent-cyan); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="logo-badge">🐦</div>
+      <div>
+        <h1>Magpie <span class="badge badge-live">Live Autonomous Engine</span></h1>
+        <p style="font-size: 12px; color: var(--text-muted);">European Classifieds Arbitrage · Benelux NL ↔ eBay DE Grounding</p>
+      </div>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" id="tab-btn-arch" onclick="switchView('arch')">Architecture Flow</button>
+      <button class="nav-tab" id="tab-btn-sim" onclick="switchView('sim')">Deal Simulator</button>
+      <button class="nav-tab" id="tab-btn-comps" onclick="switchView('comps')">European Comps</button>
+      <button class="nav-tab" id="tab-btn-safety" onclick="switchView('safety')">Safety & Audit</button>
+    </div>
+  </header>
+
+  <!-- Live Metrics Ribbon -->
+  <div class="metrics-bar">
+    <div class="metric-card">
+      <div class="metric-label">Cycle Latency</div>
+      <div class="metric-val" style="color: var(--accent-cyan);">16.4s <span class="metric-sub">wall time</span></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Hostile Pursue</div>
+      <div class="metric-val" style="color: var(--accent-emerald);">0 <span class="metric-sub">guaranteed invariant</span></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Unit Cost</div>
+      <div class="metric-val" style="color: var(--accent-purple);">€0.08 <span class="metric-sub">per live pursue</span></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Grounding Market</div>
+      <div class="metric-val" style="color: var(--accent-amber);">eBay DE <span class="metric-sub">native EUR (€)</span></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Autonomous Daemon</div>
+      <div class="metric-val" style="color: var(--accent-emerald);">300s <span class="metric-sub">cycle interval</span></div>
+    </div>
+  </div>
+
+  <!-- Main View Area -->
+  <div class="main-container">
+
+    <!-- VIEW 1: ARCHITECTURE FLOW -->
+    <div id="view-arch">
+      <h2 class="section-title">⚡ Autonomous Pipeline Architecture</h2>
+      <p class="section-desc">Click any stage below to inspect its live data payloads, API schemas, and policy logic.</p>
+
+      <div class="workflow-grid">
+        <!-- Stage 1 -->
+        <div class="stage-card selected" id="card-stage-1" onclick="selectStage(1)">
+          <div class="stage-header">
+            <span class="stage-num">01</span>
+            <span class="badge" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan);">FEED INGEST</span>
+          </div>
+          <div class="stage-title">NOTICE Stage</div>
+          <div class="stage-desc">Scrapes live Marktplaats Benelux tech feed and grounds against real eBay DE sold items.</div>
+          <div class="stage-tags">
+            <span class="tag">haketa/marktplaats-scraper</span>
+            <span class="tag">automation-lab/ebay-scraper</span>
+            <span class="tag">comps_cache.json (2h TTL)</span>
+          </div>
+        </div>
+
+        <!-- Stage 2 -->
+        <div class="stage-card" id="card-stage-2" onclick="selectStage(2)">
+          <div class="stage-header">
+            <span class="stage-num">02</span>
+            <span class="badge" style="background: rgba(139, 92, 246, 0.15); color: var(--accent-purple);">EVALUATION</span>
+          </div>
+          <div class="stage-title">DECIDE Stage</div>
+          <div class="stage-desc">Calculates margin Z-score against median & MAD. Evaluates 3-rule deterministic Gate Oracle.</div>
+          <div class="stage-tags">
+            <span class="tag">margin_z = (med - ask)/mad</span>
+            <span class="tag">policy.py (Gate v0/v1)</span>
+            <span class="tag">Advance-Fee Regex</span>
+          </div>
+        </div>
+
+        <!-- Stage 3 -->
+        <div class="stage-card" id="card-stage-3" onclick="selectStage(3)">
+          <div class="stage-header">
+            <span class="stage-num">03</span>
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">DRAFT ACTION</span>
+          </div>
+          <div class="stage-title">ACT Stage</div>
+          <div class="stage-desc">Synthesizes polite Dutch outreach text. Caps bid at 80% of ask with human confirmation lock.</div>
+          <div class="stage-tags">
+            <span class="tag">H1 Dutch Outreach</span>
+            <span class="tag">Clamped <= 80%</span>
+            <span class="tag">Drafts (zero auto-spend)</span>
+          </div>
+        </div>
+
+        <!-- Stage 4 -->
+        <div class="stage-card" id="card-stage-4" onclick="selectStage(4)">
+          <div class="stage-header">
+            <span class="stage-num">04</span>
+            <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--accent-amber);">AUDIT & HARVEST</span>
+          </div>
+          <div class="stage-title">REPORT & AUDIT</div>
+          <div class="stage-desc">Appends SHA256 cryptographic receipt, exports visual triage HTML, and triggers Telegram alerts.</div>
+          <div class="stage-tags">
+            <span class="tag">receipts.jsonl (Hash Chain)</span>
+            <span class="tag">triage_export.csv</span>
+            <span class="tag">Telegram Dispatch</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inspector Panel -->
+      <div class="inspector-panel open" id="inspector-panel">
+        <div class="inspector-header">
+          <div>
+            <h3 id="inspector-title" style="font-size: 18px; font-weight: 700;">Stage 01: NOTICE Details</h3>
+            <p id="inspector-subtitle" style="font-size: 13px; color: var(--text-muted);">Data payload & schemas traveling through this pipeline step</p>
+          </div>
+          <span class="badge" id="inspector-badge" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan);">ACTIVE STAGE</span>
+        </div>
+        <div class="inspector-grid">
+          <div>
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">Execution Logic & Operational Guarantees</div>
+            <p id="inspector-text" style="font-size: 14px; color: #cbd5e1; margin-bottom: 16px; line-height: 1.6;">
+              Queries Dutch classifieds for high-margin tech items (Nintendo Switch, PS5, iPhone, MacBook) via Apify. In parallel, retrieves ground-truth sold medians from eBay DE in EUR (€) and drops accessory noise using <code>rerank.py</code>.
+            </p>
+            <ul id="inspector-list" style="font-size: 13px; color: var(--text-muted); padding-left: 20px; line-height: 1.7;">
+              <li>Target Marketplace: marktplaats.nl (Netherlands)</li>
+              <li>Comps Grounding: eBay Germany (ebay.de, native EUR)</li>
+              <li>Accessory Reranker: Drops cases, skins, fans, and replacement parts</li>
+              <li>TTL Comps Cache: 7200s (2 hours) saves Apify compute spend</li>
+            </ul>
+          </div>
+          <div>
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">Live Sample Payload</div>
+            <pre class="code-block" id="inspector-code">{
+  "id": "s-en-mario-kart-8-deluxe",
+  "title": "Nintendo Switch V2 met accessoires en Mario Kart 8",
+  "price_eur": 160.0,
+  "category": "spelcomputers",
+  "posted_at": "2026-09-26T09:40:00Z",
+  "comps": {
+    "key": "nintendo switch",
+    "median_eur": 189.95,
+    "mad_eur": 20.95,
+    "source": "automation-lab/ebay-scraper [DE]"
+  }
+}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: DEAL SIMULATOR -->
+    <div id="view-sim" style="display: none;">
+      <h2 class="section-title">🎮 Live Deal Flow Simulator</h2>
+      <p class="section-desc">Select an actual listing from the live run to trace exactly how the decision engine evaluates margin, verifies safety, and crafts outreach.</p>
+
+      <div class="simulator-box">
+        <div class="sim-deals-selector">
+          <div class="deal-pill active" id="pill-0" onclick="simulateDeal(0)">✨ Deal #1: Nintendo Switch V2 (Drafted)</div>
+          <div class="deal-pill" id="pill-1" onclick="simulateDeal(1)">⚠️ Deal #2: iPhone 15 Pro Max (Escalated: No Margin)</div>
+          <div class="deal-pill" id="pill-2" onclick="simulateDeal(2)">🛡️ Deal #3: Scammer Tikkie / IBAN (Refused: Safety)</div>
+        </div>
+
+        <div class="deal-pipeline-flow">
+          <div class="pipe-step">
+            <span class="pipe-step-title">1. Raw Scraped Item</span>
+            <div class="pipe-step-val" id="sim-item-title">Nintendo Switch V2 + Mario Kart 8</div>
+            <div style="font-size: 13px; color: var(--text-muted);" id="sim-item-price">Ask: €160.00</div>
+            <div style="font-size: 12px; color: var(--accent-cyan);" id="sim-item-source">Marktplaats NL</div>
+          </div>
+          <div class="pipe-step">
+            <span class="pipe-step-title">2. Grounded Comp</span>
+            <div class="pipe-step-val" id="sim-comp-key">Comp: "nintendo switch"</div>
+            <div style="font-size: 13px; color: var(--text-muted);" id="sim-comp-stats">Median: €189.95 · MAD: €20.95</div>
+            <div style="font-size: 12px; color: var(--accent-amber);" id="sim-comp-mz">Margin Z: +1.43 σ</div>
+          </div>
+          <div class="pipe-step">
+            <span class="pipe-step-title">3. Gate Oracle (policy.py)</span>
+            <div class="pipe-step-val" id="sim-gate-decision"><span class="status-badge status-drafted">PURSUE (DRAFT)</span></div>
+            <div style="font-size: 13px; color: var(--text-muted);" id="sim-gate-reasons">Reason: Grounded positive margin</div>
+            <div style="font-size: 12px; color: var(--accent-emerald);" id="sim-gate-safety">Scam Check: Clean (0 risk)</div>
+          </div>
+          <div class="pipe-step">
+            <span class="pipe-step-title">4. Action & Dutch Draft</span>
+            <div class="pipe-step-val" id="sim-action-val">Offer: €128 (80% capped)</div>
+            <div style="font-size: 12px; color: var(--text-muted); font-style: italic; line-height: 1.35;" id="sim-action-text">
+              "Hoi! Mooi dat je Nintendo Switch V2 zo compleet aanbiedt! Zou je €128 willen accepteren?..."
+            </div>
+            <div style="font-size: 11px; font-family: var(--font-mono); color: var(--accent-purple);" id="sim-receipt-hash">Receipt: sha256_e1a47f2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 3: EUROPEAN COMPS & LIVE FEED -->
+    <div id="view-comps" style="display: none;">
+      <h2 class="section-title">📊 European Comps Grounding Table (eBay DE)</h2>
+      <p class="section-desc">Real ground-truth comps scraped directly from continental European eBay (ebay.de) in native EUR (€) with accessory noise filtration.</p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Target Tech Category</th>
+              <th>Median Price (EUR)</th>
+              <th>MAD (Dispersion)</th>
+              <th>Sample Size (n)</th>
+              <th>Grounding Source</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>nintendo switch</strong></td>
+              <td class="mono" style="color: var(--accent-emerald);">€189.95</td>
+              <td class="mono">€20.95</td>
+              <td class="mono">14 sold</td>
+              <td>automation-lab/ebay-scraper [DE]</td>
+              <td><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">ACTIVE CACHED</span></td>
+            </tr>
+            <tr>
+              <td><strong>ps5</strong></td>
+              <td class="mono" style="color: var(--accent-emerald);">€499.90</td>
+              <td class="mono">€49.90</td>
+              <td class="mono">11 sold</td>
+              <td>automation-lab/ebay-scraper [DE]</td>
+              <td><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">ACTIVE CACHED</span></td>
+            </tr>
+            <tr>
+              <td><strong>ps4</strong></td>
+              <td class="mono" style="color: var(--accent-emerald);">€117.79</td>
+              <td class="mono">€21.21</td>
+              <td class="mono">10 sold</td>
+              <td>automation-lab/ebay-scraper [DE]</td>
+              <td><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">ACTIVE CACHED</span></td>
+            </tr>
+            <tr>
+              <td><strong>macbook</strong></td>
+              <td class="mono" style="color: var(--accent-emerald);">€300.00</td>
+              <td class="mono">€137.00</td>
+              <td class="mono">15 sold</td>
+              <td>automation-lab/ebay-scraper [DE]</td>
+              <td><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">ACTIVE CACHED</span></td>
+            </tr>
+            <tr>
+              <td><strong>iphone</strong></td>
+              <td class="mono" style="color: var(--accent-emerald);">€131.47</td>
+              <td class="mono">€71.48</td>
+              <td class="mono">10 sold</td>
+              <td>automation-lab/ebay-scraper [DE]</td>
+              <td><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">ACTIVE CACHED</span></td>
+            </tr>
+            <tr>
+              <td><strong>airpods</strong></td>
+              <td class="mono" style="color: var(--accent-emerald);">€120.00</td>
+              <td class="mono">€45.00</td>
+              <td class="mono">13 sold</td>
+              <td>automation-lab/ebay-scraper [DE]</td>
+              <td><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">ACTIVE CACHED</span></td>
+            </tr>
+            <tr>
+              <td><strong>apple watch</strong></td>
+              <td class="mono" style="color: var(--accent-emerald);">€159.90</td>
+              <td class="mono">€64.90</td>
+              <td class="mono">15 sold</td>
+              <td>automation-lab/ebay-scraper [DE]</td>
+              <td><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">ACTIVE CACHED</span></td>
+            </tr>
+            <tr>
+              <td><strong>canon</strong></td>
+              <td class="mono" style="color: var(--accent-emerald);">€125.00</td>
+              <td class="mono">€45.01</td>
+              <td class="mono">14 sold</td>
+              <td>automation-lab/ebay-scraper [DE]</td>
+              <td><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">ACTIVE CACHED</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- VIEW 4: SAFETY & AUDIT -->
+    <div id="view-safety" style="display: none;">
+      <h2 class="section-title">🛡️ Safety Framework & Cryptographic Audit Invariants</h2>
+      <p class="section-desc">Strict compliance rules ensure Magpie cannot be jailbroken, cannot initiate hostile outreach, and never touches money tools.</p>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 40px;">
+        <div class="glass" style="padding: 24px;">
+          <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--accent-emerald);">1. Hostile Invariant: Zero Hostile Pursues</h3>
+          <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 16px;">
+            The gold evaluation benchmark in <code>gold.jsonl</code> tests scam attempts, advance-fee fraud, and prompt injections. A single failure breaks the entire build.
+          </p>
+          <div class="code-block">python3 marketmind/skin/policy.py --eval marketmind/skin/gold.jsonl
+# Result: 0 hostile_pursue (PASS)</div>
+        </div>
+
+        <div class="glass" style="padding: 24px;">
+          <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--accent-amber);">2. Kill Switch & Cold Outreach Cap</h3>
+          <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 16px;">
+            State-persisted kill-switch (<code>AUTO_PAUSE=1</code> or <code>--pause</code>) forces instant "observe-only" mode. Cold outreach is capped at 5 drafts/night.
+          </p>
+          <div class="code-block">python3 marketmind/app/run_walking_skeleton.py --pause
+# kill-switch: ON (observe-only)</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <p>Magpie Arbitrage Engine · Built for <strong>Prosus Build Weekend (25–27 Sep 2026)</strong></p>
+    <p style="margin-top: 6px;">
+      <a href="https://github.com/knarayanareddy/Magpie" target="_blank">View GitHub Repository</a> · 
+      "We judge listings, not people. We skip and escalate; we never spend."
+    </p>
+  </footer>
+
+  <script>
+    const stages = {
+      1: {
+        title: "Stage 01: NOTICE Details",
+        subtitle: "Real-world data ingestion & European grounding",
+        badge: "FEED INGEST",
+        badgeColor: "var(--accent-cyan)",
+        badgeBg: "rgba(6, 182, 212, 0.15)",
+        text: "Queries Dutch classifieds for high-margin tech items (Nintendo Switch, PS5, iPhone, MacBook) via Apify. In parallel, retrieves ground-truth sold medians from eBay DE in EUR (€) and drops accessory noise using rerank.py.",
+        items: [
+          "Target Marketplace: marktplaats.nl (Netherlands)",
+          "Comps Grounding: eBay Germany (ebay.de, native EUR)",
+          "Accessory Reranker: Drops cases, skins, fans, and replacement parts",
+          "TTL Comps Cache: 7200s (2 hours) saves Apify compute spend"
+        ],
+        code: `// Live Feed Input Schema
+{
+  "platform": "marktplaats.nl",
+  "query": "nintendo switch",
+  "maxListings": 15
+}
+
+// eBay DE Comps Grounding
+{
+  "searchQueries": ["nintendo switch konsole console"],
+  "marketplace": "DE",
+  "minPrice": 50,
+  "maxProductsPerSearch": 15
+}`
+      },
+      2: {
+        title: "Stage 02: DECIDE (Gate Oracle)",
+        subtitle: "Deterministic margin z-score & refusal filters",
+        badge: "EVALUATION",
+        badgeColor: "var(--accent-purple)",
+        badgeBg: "rgba(139, 92, 246, 0.15)",
+        text: "Models propose; code decides (Art V). Calculates margin Z-score = (median - ask) / MAD. Rejects advance-fee scams, off-platform payment attempts, and suspicious low-price traps without calling any external LLM.",
+        items: [
+          "Deterministic gate_v0: Zero LLM hallucination risk",
+          "Advance Fee Regex: Catches IBAN, Tikkie, PayPal.me",
+          "Duplicate Photo Filter: Flags reused fraud images",
+          "Margin Filter: Requires margin_z > 0.8 to consider pursuing"
+        ],
+        code: `def facts_for(item, comps):
+    key = _comps_key(item["title"], comps)
+    c = comps.get(key, {})
+    mz = (c.get("median") - item["price_eur"]) / c.get("mad")
+    return {
+        "margin_z": mz,
+        "comps": c or None,
+        "duplicate_photo": float(item.get("duplicate_photo") or 0.0),
+        "offplatform_payment_request": bool(ADVANCE_FEE_RE.search(item["description"]))
+    }`
+      },
+      3: {
+        title: "Stage 03: ACT (Draft Composer)",
+        subtitle: "Safe conversational Dutch outreach synthesis",
+        badge: "DRAFT ACTION",
+        badgeColor: "var(--accent-emerald)",
+        badgeBg: "rgba(16, 185, 129, 0.15)",
+        text: "Drafts are not sent messages. Every offer is clamped to <= 80% of ask (H1 pre-registered band), rounded to €5, and requires human confirmation via CLI or Telegram before any third party is contacted.",
+        items: [
+          "H1 Clamped Formula: min(round5(ask * 0.8), int(ask * 0.8))",
+          "Natural Dutch Phrasing: Incorporates condition hooks",
+          "No Money Tools: Magpie has zero payment APIs or bank access",
+          "Human-in-the-Loop: Requires CLI --confirm or Telegram approval"
+        ],
+        code: `// Draft Payload
+{
+  "listing_id": "s-en-mario-kart-8-deluxe",
+  "offer_eur": 128,
+  "ask_eur": 160.0,
+  "round": "1/3",
+  "text_nl": "Hoi! Mooi dat je Nintendo Switch V2 zo compleet aanbiedt! Zou je €128 willen accepteren? Ik kan het ophalen wanneer het uitkomt. (Laat gerust weten of dit past)"
+}`
+      },
+      4: {
+        title: "Stage 04: REPORT & AUDIT",
+        subtitle: "Cryptographic hash chain & operator digest",
+        badge: "AUDIT & HARVEST",
+        badgeColor: "var(--accent-amber)",
+        badgeBg: "rgba(245, 158, 11, 0.15)",
+        text: "Maintains an append-only JSONL receipt ledger where each entry is linked via an immutable input hash. Renders visual HTML triage boards and delivers overnight digests to the human reseller.",
+        items: [
+          "Immutable SHA256 input hash per decision receipt",
+          "Triage HTML grid generation (triage.html)",
+          "Ready-to-import CSV export (triage_export.csv)",
+          "Background Daemon Loop (300s heartbeat monitoring)"
+        ],
+        code: `// Audit Receipt
+{
+  "receipt_id": "rcpt_1790418432_e1a47f2",
+  "run_id": "m1-live-v0",
+  "actor": "marketmind",
+  "action_state": "drafted",
+  "offer_eur": 128,
+  "input_hash": "e1a47f28bc91d4e0",
+  "timestamp": "2026-09-26T10:06:59Z"
+}`
+      }
+    };
+
+    function selectStage(num) {
+      document.querySelectorAll('.stage-card').forEach((c, idx) => {
+        c.classList.toggle('selected', idx + 1 === num);
+      });
+      const data = stages[num];
+      document.getElementById('inspector-title').textContent = data.title;
+      document.getElementById('inspector-subtitle').textContent = data.subtitle;
+      const badge = document.getElementById('inspector-badge');
+      badge.textContent = data.badge;
+      badge.style.color = data.badgeColor;
+      badge.style.background = data.badgeBg;
+      document.getElementById('inspector-text').textContent = data.text;
+      document.getElementById('inspector-code').textContent = data.code;
+      
+      const list = document.getElementById('inspector-list');
+      list.innerHTML = "";
+      data.items.forEach(it => {
+        const li = document.createElement('li');
+        li.textContent = it;
+        list.appendChild(li);
+      });
+    }
+
+    const simDeals = [
+      {
+        title: "Nintendo Switch V2 + Mario Kart 8",
+        price: "Ask: €160.00",
+        source: "Marktplaats NL",
+        compKey: 'Comp: "nintendo switch"',
+        compStats: "Median: €189.95 · MAD: €20.95",
+        compMz: "Margin Z: +1.43 σ (High Margin)",
+        decisionHtml: '<span class="status-badge status-drafted">PURSUE (DRAFT)</span>',
+        reasons: "Reason: Margin > 0.8σ, verified comp",
+        safety: "Scam Check: Clean (0 risk)",
+        actionVal: "Offer: €128 (80% capped)",
+        actionText: '"Hoi! Mooi dat je Nintendo Switch V2 zo compleet aanbiedt! Zou je €128 willen accepteren? Ik kan het ophalen..."',
+        receipt: "Receipt: sha256_e1a47f2"
+      },
+      {
+        title: "iPhone 15 Pro Max 256GB Naturel",
+        price: "Ask: €599.99",
+        source: "Marktplaats NL",
+        compKey: 'Comp: "iphone"',
+        compStats: "Median: €131.47 · MAD: €71.48",
+        compMz: "Margin Z: -6.55 σ (Negative Margin)",
+        decisionHtml: '<span class="status-badge status-escalated">ESCALATED</span>',
+        reasons: "Reason: no_margin (Ask exceeds comp median)",
+        safety: "Safety: No hostile action taken",
+        actionVal: "Action: Escalated for Human Review",
+        actionText: "No draft generated. Item pushed to triage queue for human reseller review.",
+        receipt: "Receipt: sha256_9b2d84c"
+      },
+      {
+        title: "PS5 Console Disc (Stuur eerst €50 via Tikkie)",
+        price: "Ask: €120.00",
+        source: "Marktplaats NL",
+        compKey: 'Comp: "ps5"',
+        compStats: "Median: €499.90 · MAD: €49.90",
+        compMz: "Margin Z: +7.61 σ (Anomalous Price)",
+        decisionHtml: '<span class="status-badge status-skipped">REFUSED (SKIPPED)</span>',
+        reasons: "Reason: offplatform_payment_request (Tikkie)",
+        safety: "Safety: Scam trapped by Advance-Fee Regex",
+        actionVal: "Action: Auto-refusal recorded",
+        actionText: "Listing blocked. Zero contact made, zero money moved, audit log updated.",
+        receipt: "Receipt: sha256_f0237da"
+      }
+    ];
+
+    function simulateDeal(idx) {
+      document.querySelectorAll('.deal-pill').forEach((p, i) => {
+        p.classList.toggle('active', i === idx);
+      });
+      const d = simDeals[idx];
+      document.getElementById('sim-item-title').textContent = d.title;
+      document.getElementById('sim-item-price').textContent = d.price;
+      document.getElementById('sim-item-source').textContent = d.source;
+      document.getElementById('sim-comp-key').textContent = d.compKey;
+      document.getElementById('sim-comp-stats').textContent = d.compStats;
+      document.getElementById('sim-comp-mz').textContent = d.compMz;
+      document.getElementById('sim-gate-decision').innerHTML = d.decisionHtml;
+      document.getElementById('sim-gate-reasons').textContent = d.reasons;
+      document.getElementById('sim-gate-safety').textContent = d.safety;
+      document.getElementById('sim-action-val').textContent = d.actionVal;
+      document.getElementById('sim-action-text').textContent = d.actionText;
+      document.getElementById('sim-receipt-hash').textContent = d.receipt;
+    }
+
+    function switchView(viewName) {
+      ['arch', 'sim', 'comps', 'safety'].forEach(v => {
+        const el = document.getElementById('view-' + v);
+        const btn = document.getElementById('tab-btn-' + v);
+        if (v === viewName) {
+          el.style.display = 'block';
+          btn.classList.add('active');
+        } else {
+          el.style.display = 'none';
+          btn.classList.remove('active');
+        }
+      });
+    }
+  </script>
+</body>
+</html>
