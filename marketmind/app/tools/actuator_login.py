@@ -16,7 +16,7 @@ from pathlib import Path
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
 from mm.actuator.gates import act_dir  # noqa: E402
-from mm.actuator.driver import PROFILE  # noqa: E402
+from mm.actuator.driver import LAUNCH_ARGS, PROFILE  # noqa: E402
 
 
 def logged_in(page) -> bool:
@@ -42,17 +42,19 @@ def main() -> int:
             if not prof.exists():
                 print("❌ no saved session — run: python3 tools/actuator_login.py")
                 return 1
-            ctx = p.chromium.launch_persistent_context(str(prof), headless=True, locale="nl-NL")
+            ctx = p.chromium.launch_persistent_context(str(prof), headless=True, locale="nl-NL", **LAUNCH_ARGS)
             ok = logged_in(ctx.pages[0] if ctx.pages else ctx.new_page())
             ctx.close()
             print("✅ actuator session is logged in" if ok else "❌ session expired — run: python3 tools/actuator_login.py")
             return 0 if ok else 1
         prof.mkdir(parents=True, exist_ok=True)
         ctx = p.chromium.launch_persistent_context(str(prof), headless=False, locale="nl-NL",
-                                                   viewport={"width": 1280, "height": 900})
+                                                   viewport={"width": 1280, "height": 900}, **LAUNCH_ARGS)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.goto("https://www.marktplaats.nl/", wait_until="domcontentloaded")
         print("A Chromium window is open. Log in to your DEDICATED DEMO Marktplaats account there.\n"
+              "Use the E-MAIL + WACHTWOORD fields — NOT 'Doorgaan met Google' (Google refuses automated browsers).\n"
+              "Account made with Google and no password? Click 'Wachtwoord vergeten?' to set one via e-mail first.\n"
               "Magpie does not see your password. Close the window when you're logged in.")
         try:
             while ctx.pages:

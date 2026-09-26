@@ -19,6 +19,10 @@ from urllib.parse import urlparse
 from .gates import ALLOWED_HOSTS, Refused, act_dir, receipt
 
 PROFILE = lambda d: d / "profile"                                   # persistent login (gitignored under out/)
+# Same launch fingerprint for login and runs (one profile). Drops the "controlled by automation" markers that make
+# Google's OAuth page refuse ("This browser or app may not be secure"). Marktplaats e-mail+password login is the
+# supported path; Google sign-in may still be refused by Google regardless.
+LAUNCH_ARGS = {"ignore_default_args": ["--enable-automation"], "args": ["--disable-blink-features=AutomationControlled"]}
 PAYMENT_RE = re.compile(r"\b(betalen|betaal\s*nu|afrekenen|ideal|creditcard|paypal|tikkie|bestelling\s+plaatsen|"
                         r"direct\s+kopen|koop\s+nu|checkout|kosten:\s*€)\b", re.I)
 LOGIN_RE = re.compile(r"\b(inloggen|log\s*in\s*met|wachtwoord)\b", re.I)
@@ -183,7 +187,7 @@ def execute(token: str, e: dict, *, live: bool, headed: bool = False, d: Path | 
     else:
         with sync_playwright() as p:
             ctx = p.chromium.launch_persistent_context(
-                str(prof), headless=not headed, locale="nl-NL", viewport={"width": 1280, "height": 900},
+                str(prof), headless=not headed, locale="nl-NL", viewport={"width": 1280, "height": 900}, **LAUNCH_ARGS,
                 record_video_dir=str(r.dir), record_video_size={"width": 1280, "height": 900})
             ctx.set_default_timeout(15000)
             r.page = ctx.pages[0] if ctx.pages else ctx.new_page()
