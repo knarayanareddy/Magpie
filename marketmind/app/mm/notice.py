@@ -64,8 +64,9 @@ def load(mode: str, measure: bool = False) -> tuple[list[dict], dict]:
                 continue
 
         if not due:
-            # nothing due by learned cadence: a quiet cycle, NOT a feed error (no alert, no Apify spend)
-            comps = _load_comps_live(token)
+            # nothing due by learned cadence: a quiet cycle, NOT a feed error (no alert, no Apify spend —
+            # comps come from cache only: refreshing them with nothing to decide cost 246 s/$0.64 on Sat)
+            comps = _load_comps_live(token, cache_only=True)
             meta = {"source": f"apify:{actor}", "mode": "live", "cadence": cadence, "queries_fetched": [],
                     "timing_note": "no query due (learned cadence) — 0 Apify listing runs"}
             meta["cycle_time_s"] = round(time.perf_counter() - t0, 3)
@@ -93,7 +94,8 @@ def _apify_post(token: str, actor: str, body: bytes) -> list:
     return out if isinstance(out, list) else out.get("items", [])
 
 
-def _load_comps_live(token: str) -> dict:
+def _load_comps_live(token: str, cache_only: bool = False) -> dict:
+    """cache_only=True (quiet cycle, nothing to decide): return the cache regardless of age, never scrape."""
     actor = os.environ.get("APIFY_ACTOR_COMPS", "")
     if not actor:
         return {}
@@ -102,6 +104,12 @@ def _load_comps_live(token: str) -> dict:
     cache_ttl = int(os.environ.get("COMPS_CACHE_TTL_S", "7200"))
     force_refresh = os.environ.get("FORCE_COMPS_REFRESH", "0") == "1"
 
+    if cache_only:
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8")) if cache_path.exists() else {}
+            return cached if isinstance(cached, dict) else {}
+        except Exception:
+            return {}
     if not force_refresh and cache_path.exists():
         try:
             mtime = cache_path.stat().st_mtime

@@ -55,13 +55,28 @@ def run_intake(folder: Path, d: Path, *, vision=None) -> list[dict]:
             hint = None
         if hint:
             prop = {**prop, "memory_hint": hint}
-        privacy = prop["contains_face"] or prop["contains_document_or_address"]
+        # provenance check: a "photo dump" photo that matches a photo from a Marktplaats ad we scanned is
+        # probably someone else's listing photo (stock or scraped) — flag it, the human confirms (Art VI)
+        try:
+            import json as _json
+            from .. import phash as _ph
+            buy_state = Path(__file__).resolve().parents[2] / "out" / "state.json"
+            idx = _json.loads(buy_state.read_text()).get("phash", {}) if buy_state.exists() else {}
+            match = next((v["id"] for p in grp if p["dhash"] for k, v in idx.items()
+                          if _ph.hamming(p["dhash"], k) <= _ph.DUP_MAX_HAMMING), None)
+        except Exception:
+            match = None
+        if match:
+            prop = {**prop, "photo_seen_on_marketplace": match}
+        privacy = prop["contains_face"] or prop["contains_document_or_address"] or bool(prop.get("photo_seen_on_marketplace"))
         status = "privacy_review" if privacy else ("needs_confirmation")
         it = {"id": iid, "created": now(), "status": status, "photos": [p["file"] for p in grp],
               "photo_meta": [{k: p[k] for k in ("sha", "dhash", "w", "h")} for p in grp],
               "proposal": prop, "facts": None, "price": None, "draft": None, "posted": None}
         st.data["items"][iid] = it
         reasons = ["privacy_review"] if privacy else ["needs_confirmation"]
+        if prop.get("photo_seen_on_marketplace"):
+            reasons.append("photo_seen_on_marketplace")
         if prop.get("multiple_items"):
             reasons.append("multiple_items_in_photo")
         if prop["vision"] != "ok":

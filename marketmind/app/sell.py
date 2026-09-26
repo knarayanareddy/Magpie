@@ -85,6 +85,9 @@ def main(argv: list[str] | None = None) -> int:
                     if p.get("memory_hint"):
                         print(f"    memory: you labelled a near-identical photo '{p['memory_hint']['model']}' "
                               f"({p['memory_hint']['at'][:10]}) — still confirm")
+                    if p.get("photo_seen_on_marketplace"):
+                        print(f"    ⚠ this photo matches one from a Marktplaats ad Magpie scanned ({p['photo_seen_on_marketplace']}) "
+                              f"— use your own photo, or --clear-privacy if it really is yours")
             elif a.cmd == "status":
                 print(_status_text(d, a.short))
             elif a.cmd == "confirm":

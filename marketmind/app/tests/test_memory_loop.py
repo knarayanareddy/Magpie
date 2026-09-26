@@ -41,8 +41,15 @@ def fake_apify(token, actor, body):
 
 
 notice._apify_post = fake_apify
-notice._load_comps_live = lambda token: {"iphone": {"median": 450.0, "mad": 60.0, "n": 9, "source": "family asking comps",
-                                                    "basis": "asking"}}
+COMPS_CALLS: list[bool] = []
+
+
+def fake_comps(token, cache_only=False):
+    COMPS_CALLS.append(cache_only)
+    return {"iphone": {"median": 450.0, "mad": 60.0, "n": 9, "source": "family asking comps", "basis": "asking"}}
+
+
+notice._load_comps_live = fake_comps
 
 NOW = datetime.now(timezone.utc)
 con = db.connect()
@@ -167,9 +174,11 @@ con.execute("INSERT INTO fetches(search_query, fetched_at, hour_local, n_fetched
             ("iphone 14", NOW.strftime("%Y-%m-%dT%H:%M:%SZ"), h, 10, 0, 0.02, "justnow"))
 con.commit()
 CALLS.clear()
+COMPS_CALLS.clear()
 s = run_cycle(out)
 digest = (out / "digest.txt").read_text()
 check(CALLS == [] and not s.get("error"), f"no query due => 0 Apify calls and NOT a feed error ({s.get('error')})")
+check(COMPS_CALLS == [True], f"quiet cycle reads comps from cache only, never refreshes them ({COMPS_CALLS})")
 check("SCAN FAILED" not in digest and "empty feed" not in digest and "no query due" in digest,
       "quiet-cycle digest says 'no query due', not 'empty feed'")
 
