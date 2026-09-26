@@ -12,19 +12,19 @@ Execute **in milestone order**. Article I: M0–M1 are veto-prioritized over M2+
 ## Phase 1 — M0 · Walking skeleton (~3h) — gate **v0**
 Goal: **one real listing, one real decision, one real action, one real report. Ugly is fine.**
 - [ ] **T04** Kickoff prep (concrete dates): demo + 2 counterparty accounts **Thu 24** (warm Thu–Fri with light normal use) · consent + `NAMED_RESELLER` + H1/H2 freeze **Thu 24** · 5 own listings posted **Fri 26** · keys probed **Fri 26** (incl. TF → record `live|fallback`) · **live smoke run Fri evening** (one scan → one decision → one draft → one digest; label "dress rehearsal").
-- [ ] **T05** Apify actor up with one **real** run; dataset shape captured in `plan.md` terms; run cycle time **measured** (kills the 60s myth).
-- [ ] **T06** n8n: `wf-scan` → `wf-decide` minimal (comps lookup for one item + `margin_z` + **gate v0 only**).
+- [x] **T05** Apify actor up with one **real** run; dataset shape captured in `plan.md` terms; run cycle time **measured** (kills the 60s myth).
+- [~] **T06** *(Sat: wf-m0/m1/m2 deployed to n8n Cloud via `app/n8n/deploy_n8n.py`, inactive; first manual n8n execution pending)* n8n: `wf-scan` → `wf-decide` minimal (comps lookup for one item + `margin_z` + **gate v0 only**).
 - [ ] **T07** One action path proven end-to-end (T1 reprice on own listing OR T2 offer to pre-arranged counterparty; draft-assist acceptable).
-- [ ] **T08** One Telegram report line sent (counts can be hardcoded format; content real). **M0 DONE when a stranger could watch this run and call it "a thing that acts."**
+- [x] **T08** *(Sat: real digest sent via @KnReddy_bot; loop now pushes event-driven pings — `mm/notify.py`)* One Telegram report line sent (counts can be hardcoded format; content real). **M0 DONE when a stranger could watch this run and call it "a thing that acts."**
 
 ## Phase 2 — M1 · Core loop closes (~5h) — gate **v0**
 Goal: the product works **unattended**. Overnight-capable.
-- [ ] **T09** Scan cadence + `seen-ids` + pHash dedupe (re-posts don't double-offer).
-- [ ] **T10** Comps pipeline solid (eBay sold median/MAD) + `margin_z`; `no_comps ⇒ escalate` fail-closed.
-- [ ] **T11** Trust tier v1 per `plan.md` §4 + `MAX_COLD_OUTREACH` enforced in code + `/pause` `/resume` kill switch live. Wire T2/T3 approvals via **n8n native human-in-the-loop tool-approval** where available; Telegram approve buttons as fallback + digest surface.
+- [x] **T09** *(Sat: 5-min loop + seen-ids + pHash re-post guard `mm/phash.py`; 39 live photos indexed)* Scan cadence + `seen-ids` + pHash dedupe (re-posts don't double-offer).
+- [~] **T10** *(Sat: eBay DE median/MAD + 2h cache live; no_comps fail-closed; repair/part listings → `not_device`, €0 Bieden → `no_price`. Coverage = 8 device families)* Comps pipeline solid (eBay sold median/MAD) + `margin_z`; `no_comps ⇒ escalate` fail-closed.
+- [~] **T11** *(Sat: MAX_COLD_OUTREACH enforced + `/magpie_pause` `/magpie_resume` `/magpie_status` via Hermes quick_commands — needs one live phone test; n8n HITL approvals not wired)* Trust tier v1 per `plan.md` §4 + `MAX_COLD_OUTREACH` enforced in code + `/pause` `/resume` kill switch live. Wire T2/T3 approvals via **n8n native human-in-the-loop tool-approval** where available; Telegram approve buttons as fallback + digest surface.
 - [ ] **T12** ListingPilot minimal: stale-rule (no views N days) → reprice/bump own listing; inbound reply with dispute-words → T3 escalate.
 - [ ] **T13** Browser-Use act path + **one witnessed draft-assist fallback** (the ladder is real, not slides).
-- [ ] **T14** Digest v1: scanned · skipped · escalated · acted (by `action_state`) · learned (`unmeasured` OK) + named human + risk-tier footer.
+- [~] **T14** *(Sat: digest renders every cycle + pushed on drafts/errors/08:00 summary; `learned` still unmeasured until an outcome is recorded)* Digest v1: scanned · skipped · escalated · acted (by `action_state`) · learned (`unmeasured` OK) + named human + risk-tier footer.
 - [ ] **T15** **Hero overnight run — Sat 26 Sep 22:00 → Sun 27 Sep** (hero run #2 with full capture per `checklists.md` §3; run #1 was Fri 25 Sep hard gate). Measure first-touch p50 → replaces `unmeasured`. **Hard gate (judge mandate, sitting 3): the run must be armed before Sat midnight — no logged run ⇒ no proof for the 15:00 video.**
 
 ### ⛔ GATE CHECKPOINT — Core-First Warden sign-off required before any Phase 3 task
