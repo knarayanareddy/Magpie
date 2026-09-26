@@ -29,7 +29,7 @@ Model knobs (Art II.3): observe ≠ judge; TF preferred, OpenAI-compatible legal
 | piece | choice | why |
 |---|---|---|
 | Decisions | n8n AI Agent + `POLICY` Code node | Art II.1 — judged criterion; canvas is the audit story |
-| Data | Apify: marktplaats listings actor, ebay sold comps, own-listings monitor, google/tavily verify | real-world data, run history = logs |
+| Data | Apify: marktplaats listings actor, ebay comps (**sold prices**, `caffein.dev/ebay-sold-listings`, since Sat 26 Sep 12:50Z; asking-price fallback labelled), own-listings monitor, google/tavily verify | real-world data, run history = logs |
 | Act | Browser-Use cloud (session recordings = demo footage); draft-assist fallback | semi-irreversible, allowlisted (Art XII.1) |
 | Memory | Airtable: `listings · decisions · receipts · priors · overrides` | receipts + learning in one place |
 | Human | Telegram bot: digest, approve, `/pause` `/resume` | one channel, one kill switch |
