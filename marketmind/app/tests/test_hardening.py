@@ -43,6 +43,21 @@ with tempfile.TemporaryDirectory() as td:
     boom = notify.Notifier(send=lambda t: (_ for _ in ()).throw(RuntimeError("net down")))
     boom.armed("live", "v0", 300)
     check(True, "send failure does not raise into the loop")
+    # US-10: memory savings accumulate and appear in the 08:00 summary
+    mn = notify.Notifier(send=None)
+    mn.last_morning = None
+    mn._maybe_morning = lambda dp: None                         # hold the summary until we have totals
+    for _ in range(3):
+        mn.cycle({**base, "memory": {"cadence_skipped": 3, "cadence_fetched": 1, "comps_hits": 2, "verdict_hits": 1}}, dg)
+    del mn._maybe_morning
+    mn.last_morning = None
+    import datetime as _dt
+    _real_now = notify._now
+    notify._now = lambda: _dt.datetime.now().replace(hour=8, minute=5)
+    mn._maybe_morning(dg)
+    notify._now = _real_now
+    check(mn.sent and "9/12 listing fetches skipped" in mn.sent[-1] and "6 decisions on memory comps" in mn.sent[-1],
+          f"morning summary reports memory savings ({(mn.sent or [''])[-1].splitlines()[1:2]})")
 
 # 2. duplicate-photo signal (dHash): math, allowlist, redirects, near-dup detection, retry window
 check(phash._allowed("https://evil.example.com/a.jpg") is None, "pHash refuses non-CDN host (Art XII.1)")

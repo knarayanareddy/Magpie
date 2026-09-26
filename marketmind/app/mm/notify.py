@@ -43,6 +43,7 @@ class Notifier:
         self.err_alerted = False
         self.paused = None
         self.totals = {s: 0 for s in STATES}
+        self.mem = {"comps_hits": 0, "verdict_hits": 0, "cadence_skipped": 0, "cadence_fetched": 0}
         self.cycles = 0
         self.errors = 0
         self.last_morning = _now().date() if _now().hour >= MORNING_HOUR else None
@@ -71,6 +72,8 @@ class Notifier:
         counts = summary.get("counts", {})
         for s in STATES:
             self.totals[s] += int(counts.get(s, 0) or 0)
+        for k in self.mem:                                   # US-10 market-memory savings, overnight totals
+            self.mem[k] += int((summary.get("memory") or {}).get(k, 0) or 0)
 
         # errors: debounce transient feed hiccups
         if summary.get("error"):
@@ -106,8 +109,17 @@ class Notifier:
         body = (f"☀️ Magpie overnight summary ({self.cycles} cycles, {self.errors} feed errors)\n"
                 f"skipped {t['skipped']} · escalated {t['escalated']} · drafted {t['drafted']} · "
                 f"auto {t['pursued_auto']}")
+        m = self.mem
+        if any(m.values()):
+            import os
+            usd = float(os.environ.get("APIFY_USD_PER_LISTINGS_RUN", "0.0196"))
+            planned = m["cadence_skipped"] + m["cadence_fetched"]
+            body += (f"\nmemory: {m['cadence_skipped']}/{planned} listing fetches skipped by learned cadence "
+                     f"(≈${m['cadence_skipped'] * usd:.2f} Apify saved) · {m['comps_hits']} decisions on memory comps · "
+                     f"{m['verdict_hits']} re-posts answered from verdict cache")
         if digest_path and digest_path.exists():
             body += "\n\nlast cycle:\n" + digest_path.read_text()[:3000]
         self._emit(body)
         self.totals = {s: 0 for s in STATES}
+        self.mem = {k: 0 for k in self.mem}
         self.cycles = self.errors = 0
