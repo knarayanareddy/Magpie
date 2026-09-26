@@ -26,7 +26,10 @@ def _chat(model: str, system: str, user: str) -> dict | None:
             or "https://api.openai.com/v1").rstrip("/")
     body = json.dumps({"model": model, "messages": [{"role": "system", "content": system},
                                                     {"role": "user", "content": user}],
-                       "response_format": {"type": "json_object"}, "max_tokens": 220}).encode()
+                       "response_format": {"type": "json_object"},
+                       # reasoning models (GLM/gpt-oss/Nemotron) spend completion tokens thinking
+                       # before the JSON; 220 truncated them to empty => silent judge_unconfigured
+                       "max_tokens": int(os.environ.get("JUDGE_MAX_TOKENS", "1024"))}).encode()
     req = urllib.request.Request(f"{base}/chat/completions", data=body,
                                  headers={"Content-Type": "application/json",
                                           "Authorization": f"Bearer {key}"})
