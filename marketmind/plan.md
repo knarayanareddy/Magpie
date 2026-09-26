@@ -32,6 +32,7 @@ Model knobs (Art II.3): observe ≠ judge; TF preferred, OpenAI-compatible legal
 | Data | Apify: marktplaats listings actor, ebay comps (**sold prices**, `caffein.dev/ebay-sold-listings`, since Sat 26 Sep 12:50Z; asking-price fallback labelled), own-listings monitor, google/tavily verify | real-world data, run history = logs |
 | Act | Browser-Use cloud (session recordings = demo footage); draft-assist fallback | semi-irreversible, allowlisted (Art XII.1) |
 | Memory | Airtable: `listings · decisions · receipts · priors · overrides` | receipts + learning in one place |
+| Market memory (US-10, Sat 26 Sep) | local SQLite `out/market.db` (`app/mm/memory/`): price history, verdict cache, fetch cadence, human feedback — narrows the Airtable memory to the audit tables; learning data stays local, stdlib-only (Art XI) | DB-first comps + T27 verdict cache + learned cadence; ClickHouse-portable schema, not a server |
 | Human | Telegram bot: digest, approve, `/pause` `/resume` | one channel, one kill switch |
 | Cache & Routing (P2) | **JEV Verdict Cache (Spec'd P2 / T27)** | Planned pHash/embedding verdict cache; routing knob core in M1 fallback ladder |
 
