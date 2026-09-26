@@ -70,5 +70,41 @@
   "message_id": 123,
   "source": "python-loop",
   "first_line": "✅ Magpie feed recovered after 2 failed cycles"
+ },
+ {
+  "ts": "2026-09-26T14:42:26Z",
+  "message_id": 133,
+  "source": "python-loop",
+  "first_line": "🐦 Magpie loop stopped (terminated by user) after 21 cycles · skipped 0 · escalat"
+ },
+ {
+  "ts": "2026-09-26T14:42:30Z",
+  "message_id": 134,
+  "source": "python-loop",
+  "first_line": "🐦 Magpie loop armed · mode=live gate=v0 every 300s · pings: drafts, errors, kill"
+ },
+ {
+  "ts": "2026-09-26T14:45:52Z",
+  "message_id": 135,
+  "source": "python-loop",
+  "first_line": "🐦 Magpie loop stopped (terminated by user) after 1 cycles · skipped 0 · escalate"
+ },
+ {
+  "ts": "2026-09-26T14:45:56Z",
+  "message_id": 136,
+  "source": "python-loop",
+  "first_line": "🐦 Magpie loop armed · mode=live gate=v0 every 300s · pings: drafts, errors, kill"
+ },
+ {
+  "ts": "2026-09-26T14:46:19Z",
+  "message_id": 137,
+  "source": "python-loop",
+  "first_line": "🐦 Magpie loop stopped (terminated by user) after 1 cycles · skipped 0 · escalate"
+ },
+ {
+  "ts": "2026-09-26T14:46:22Z",
+  "message_id": 138,
+  "source": "python-loop",
+  "first_line": "🐦 Magpie loop armed · mode=live gate=v0 every 300s · pings: drafts, errors, kill"
  }
 ]

@@ -1,6 +1,342 @@
 {
  "haketa/marktplaats-scraper": [
   {
+   "run_id": "RcIdf2PHoc7KtVFgk",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:45:00.919Z",
+   "finished": "2026-09-26T14:45:04.157Z",
+   "dataset_id": "SHCcPgQA9tr0zvkTy"
+  },
+  {
+   "run_id": "jTNN9ygAQMgEC8YB2",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:44:51.062Z",
+   "finished": "2026-09-26T14:44:58.902Z",
+   "dataset_id": "Cjav9rmpAZcK5BcAH"
+  },
+  {
+   "run_id": "dl3qhmuXEjbc9w6Qi",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:44:46.910Z",
+   "finished": "2026-09-26T14:44:50.045Z",
+   "dataset_id": "k12hiQc9c8RrHbQzv"
+  },
+  {
+   "run_id": "QjLDbFvpo0Dpe8Zms",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:44:37.523Z",
+   "finished": "2026-09-26T14:44:40.457Z",
+   "dataset_id": "h3ukxRMAhvfB5QT2E"
+  },
+  {
+   "run_id": "hx4nx1XNyNUKs43hv",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:42:05.398Z",
+   "finished": "2026-09-26T14:42:10.761Z",
+   "dataset_id": "mRLC8GGyANLqexa7k"
+  },
+  {
+   "run_id": "1f8sb0JAvFKXpy5op",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:42:00.844Z",
+   "finished": "2026-09-26T14:42:04.797Z",
+   "dataset_id": "f1T4SEotvZH1c8GaN"
+  },
+  {
+   "run_id": "gdL4GlyYHt3mwWwYg",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:41:57.747Z",
+   "finished": "2026-09-26T14:42:00.043Z",
+   "dataset_id": "NKGmuctxalkXrO5Tp"
+  },
+  {
+   "run_id": "cibiew2V8M4qMNw4d",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:41:53.590Z",
+   "finished": "2026-09-26T14:41:56.781Z",
+   "dataset_id": "TzhTaxV2mJRgPh39F"
+  },
+  {
+   "run_id": "cPSkUbzgyTCuASsgA",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:36:58.952Z",
+   "finished": "2026-09-26T14:37:01.664Z",
+   "dataset_id": "s350tneh5I3qi5LoR"
+  },
+  {
+   "run_id": "4XbF2oUFZqRV3mw6U",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:36:55.944Z",
+   "finished": "2026-09-26T14:36:58.355Z",
+   "dataset_id": "7VX2HEzjrRctIRH4s"
+  },
+  {
+   "run_id": "sNHJc8GcdUFYo6ELb",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:36:51.520Z",
+   "finished": "2026-09-26T14:36:55.271Z",
+   "dataset_id": "dBILtg3bGW7i8dTFx"
+  },
+  {
+   "run_id": "Cz16bR0gtPfQI37pX",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:36:47.941Z",
+   "finished": "2026-09-26T14:36:50.866Z",
+   "dataset_id": "hE7iDl8nffuHVcAXq"
+  },
+  {
+   "run_id": "mbFpQYArsppbUkJQM",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:31:59.671Z",
+   "finished": "2026-09-26T14:32:03.763Z",
+   "dataset_id": "nBlY6hwF5h9bn3SsB"
+  },
+  {
+   "run_id": "b6P2YolTEMW4PoMg6",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:31:55.454Z",
+   "finished": "2026-09-26T14:31:59.045Z",
+   "dataset_id": "pS72IDuL9Zl0ueYE3"
+  },
+  {
+   "run_id": "8bXmKdCLI0dzP0Fwf",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:31:51.695Z",
+   "finished": "2026-09-26T14:31:54.788Z",
+   "dataset_id": "nlQhSele15QMFRPJf"
+  },
+  {
+   "run_id": "itS0hGecZCbtwaVY6",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:31:47.908Z",
+   "finished": "2026-09-26T14:31:50.962Z",
+   "dataset_id": "Y5PB6tyCEh2cUDozp"
+  },
+  {
+   "run_id": "KkW2J8vgqosfaQJbc",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:27:00.278Z",
+   "finished": "2026-09-26T14:27:03.995Z",
+   "dataset_id": "xSkji9cSgUBRXMFEk"
+  },
+  {
+   "run_id": "mTThA5z4O6Az7yn6W",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:26:56.567Z",
+   "finished": "2026-09-26T14:26:59.627Z",
+   "dataset_id": "6y3oMuw6FUE8dnOj2"
+  },
+  {
+   "run_id": "pcBJko05FnsxgdfAk",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:26:53.524Z",
+   "finished": "2026-09-26T14:26:55.874Z",
+   "dataset_id": "yb6j70aGoZx8iEksS"
+  },
+  {
+   "run_id": "VHoomVQTIaxvpvJEg",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:26:47.873Z",
+   "finished": "2026-09-26T14:26:52.798Z",
+   "dataset_id": "ZbHBBTmIKZC3P1bQ1"
+  },
+  {
+   "run_id": "FcLQw252AiYapf7zo",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:22:01.700Z",
+   "finished": "2026-09-26T14:22:04.726Z",
+   "dataset_id": "67T9YSoXdGDqzHzNF"
+  },
+  {
+   "run_id": "szNBhyrbHDlc493wj",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:21:57.661Z",
+   "finished": "2026-09-26T14:22:00.873Z",
+   "dataset_id": "F05VyHkqwi2xMCHvn"
+  },
+  {
+   "run_id": "OXCZiPblrTRGOfphU",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:21:52.717Z",
+   "finished": "2026-09-26T14:21:56.913Z",
+   "dataset_id": "Fd6NwQzRkOva6lYbj"
+  },
+  {
+   "run_id": "whVvtKwb5mlTQ5E48",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:21:47.916Z",
+   "finished": "2026-09-26T14:21:52.003Z",
+   "dataset_id": "bXPnLwEgzcaJI4ZAe"
+  },
+  {
+   "run_id": "d3LxfBiM7bWygm3Zj",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:17:05.582Z",
+   "finished": "2026-09-26T14:17:11.160Z",
+   "dataset_id": "VQfeovg2afXqHiCdE"
+  },
+  {
+   "run_id": "o6jG4Ue9e2neEFTuc",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:17:00.579Z",
+   "finished": "2026-09-26T14:17:05.004Z",
+   "dataset_id": "bgOcRRTRymdtfEcCy"
+  },
+  {
+   "run_id": "mT89Z9ooJxzaKg37M",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:16:53.510Z",
+   "finished": "2026-09-26T14:16:59.834Z",
+   "dataset_id": "YSTB8gYUwWM3Kh1ny"
+  },
+  {
+   "run_id": "lK7nqCI9gxmExNxcu",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:16:47.892Z",
+   "finished": "2026-09-26T14:16:52.803Z",
+   "dataset_id": "7EwowtXgO90vvZhKh"
+  },
+  {
+   "run_id": "jOKpm4U7R4kL0FV3T",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:11:58.077Z",
+   "finished": "2026-09-26T14:12:00.647Z",
+   "dataset_id": "6La303BI6pcTpvsN5"
+  },
+  {
+   "run_id": "nfux3lslWblQdrFl6",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:11:54.854Z",
+   "finished": "2026-09-26T14:11:57.460Z",
+   "dataset_id": "RNgpvoCUedL8q7k05"
+  },
+  {
+   "run_id": "4eU18BHjxfN3x5c3B",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:11:51.252Z",
+   "finished": "2026-09-26T14:11:54.085Z",
+   "dataset_id": "kftt2ZP3c7eyqReo0"
+  },
+  {
+   "run_id": "6D5lRLgfc8npZeQMO",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:11:47.905Z",
+   "finished": "2026-09-26T14:11:50.645Z",
+   "dataset_id": "aEjd6oCvKmCKkz0s1"
+  },
+  {
+   "run_id": "3SgpbcG7OrbXqFX4I",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:07:04.137Z",
+   "finished": "2026-09-26T14:07:06.766Z",
+   "dataset_id": "g7KkHXFpqsIt2HDRq"
+  },
+  {
+   "run_id": "13w79wS5v18xnVLdg",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:06:59.160Z",
+   "finished": "2026-09-26T14:07:03.579Z",
+   "dataset_id": "CA0bCxEBR8QPJja91"
+  },
+  {
+   "run_id": "leO1iJJYqUHZAZM5l",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:06:52.433Z",
+   "finished": "2026-09-26T14:06:58.508Z",
+   "dataset_id": "SuOr1o6WFAMvBmiIk"
+  },
+  {
+   "run_id": "jO3SM5gv9KdXKIKeY",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:06:47.916Z",
+   "finished": "2026-09-26T14:06:51.715Z",
+   "dataset_id": "LMAGzatdb5XWCph0Q"
+  },
+  {
+   "run_id": "S6cAgjPjeTYsogLhe",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:02:03.880Z",
+   "finished": "2026-09-26T14:02:07.254Z",
+   "dataset_id": "PNKiiMaS1PbGuG4KL"
+  },
+  {
+   "run_id": "U3aVZ3yeI3ck8gjDj",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:01:58.508Z",
+   "finished": "2026-09-26T14:02:03.246Z",
+   "dataset_id": "WBDc26B5dJPABGfzO"
+  },
+  {
+   "run_id": "9f4jg6j922pE5qjrJ",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:01:54.419Z",
+   "finished": "2026-09-26T14:01:57.806Z",
+   "dataset_id": "myuEBhsqe9f4pjzgD"
+  },
+  {
+   "run_id": "T1wYot6omO02nNcxt",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T14:01:47.871Z",
+   "finished": "2026-09-26T14:01:53.700Z",
+   "dataset_id": "dSlCyyIvd8MNao1Zf"
+  },
+  {
+   "run_id": "x6I8ZtZc0kkbsIN5M",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T13:56:58.645Z",
+   "finished": "2026-09-26T13:57:01.266Z",
+   "dataset_id": "dm0Px8VqtQdNJ8iMg"
+  },
+  {
+   "run_id": "2LzEE8hsYDiHH7sFw",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T13:56:55.477Z",
+   "finished": "2026-09-26T13:56:58.066Z",
+   "dataset_id": "0HgKkRONkT5RDspHM"
+  },
+  {
+   "run_id": "RV9LSli9pHz4fUa4W",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T13:56:51.277Z",
+   "finished": "2026-09-26T13:56:54.797Z",
+   "dataset_id": "YDZFsWJHh299LuE6H"
+  },
+  {
+   "run_id": "cD81xJ2GbAde6ACdY",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T13:56:47.973Z",
+   "finished": "2026-09-26T13:56:50.567Z",
+   "dataset_id": "MDZL9sxwIe9EYf5K6"
+  },
+  {
+   "run_id": "fTDWVP7eOSw9pbPek",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T13:52:01.511Z",
+   "finished": "2026-09-26T13:52:05.301Z",
+   "dataset_id": "1TlmlaS1WA4ea9Vfd"
+  },
+  {
+   "run_id": "yAIBYbZbSCvof0qA8",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T13:51:58.003Z",
+   "finished": "2026-09-26T13:52:00.886Z",
+   "dataset_id": "fDyDZTSGdSDk48eGA"
+  },
+  {
+   "run_id": "8jv3ujvK8dVuSKJA4",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T13:51:54.432Z",
+   "finished": "2026-09-26T13:51:57.276Z",
+   "dataset_id": "hvVErNN7DRneYiAM0"
+  },
+  {
+   "run_id": "kcV9bTTU06b14y4An",
+   "status": "SUCCEEDED",
+   "started": "2026-09-26T13:51:48.023Z",
+   "finished": "2026-09-26T13:51:53.577Z",
+   "dataset_id": "zLSfMvD1rS1iQL8Xg"
+  },
+  {
    "run_id": "mkYogm6bsYbjT2ne4",
    "status": "SUCCEEDED",
    "started": "2026-09-26T13:47:00.016Z",

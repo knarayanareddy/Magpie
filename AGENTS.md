@@ -76,7 +76,16 @@ python3 marketmind/app/tests/test_m1.py
 
 # 4. Gate & health parity test (Python vs standalone JS vs 3 inline n8n workflows)
 python3 marketmind/app/tests/test_gate_parity.py
+
+# 5-9. Hardening, n8n Code nodes (in Node), sell co-pilot (US-9), market memory (US-10) + its loop wiring
+python3 marketmind/app/tests/test_hardening.py
+python3 marketmind/app/tests/test_n8n_nodes.py
+python3 marketmind/app/tests/test_sell.py
+python3 marketmind/app/tests/test_memory.py
+python3 marketmind/app/tests/test_memory_loop.py
 ```
+
+**Market memory kill switches (US-10, live mode only, fail-open):** `MEM_ALL=0` = exact legacy behaviour; per feature `MEM_INGEST` / `MEM_COMPS` / `MEM_VERDICT` / `MEM_CADENCE` `=0`. Store: `marketmind/app/out/market.db` (gitignored). Sync sidecar: `marketmind/app/bin/memory-sync.sh start|stop|status`. Metrics: `python3 marketmind/app/tools/memory_metrics.py`.
 
 ---
 

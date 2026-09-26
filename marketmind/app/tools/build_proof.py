@@ -115,6 +115,18 @@ def main() -> int:
         ok = ok and s_ok
 
     st = json.loads((OUT / "state.json").read_text())
+    # 7. market memory (US-10) — aggregate numbers only (no titles/prices per listing); metrics recomputed
+    memory: dict = {"present": (OUT / "market.db").exists()}
+    if memory["present"]:
+        import subprocess
+        subprocess.run([sys.executable, str(APP / "tools" / "memory_metrics.py")], capture_output=True, timeout=60)
+        mm_p = OUT / "memory_metrics.json"
+        if mm_p.exists():
+            mm = json.loads(mm_p.read_text())
+            (PROOF / "memory_metrics.json").write_text(json.dumps(mm, indent=2))
+            memory.update({"fetch": mm.get("fetch"), "lookups": mm.get("lookups"), "store": mm.get("store"),
+                           "cache_hit_receipts": dict(collections.Counter(
+                               r["scores"].get("cache_hit") for r in rows if r.get("scores", {}).get("cache_hit")))})
     hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()[:16] for p in sorted(PROOF.glob("*.json*"))}
     summary = {
         "built_at": now, "receipts_total": len(rows), "receipts_live": len(live),
@@ -126,7 +138,7 @@ def main() -> int:
         "apify_runs": {k: (len(v) if isinstance(v, list) else v) for k, v in runs.items()},
         "n8n_executions": [{k: x[k] for k in ("execution_id", "status", "mode", "started", "counts",
                                               "ledger_chain_links", "telegram_message_ids")} for x in n8n],
-        "telegram_python_messages": len(tmsgs), "sell_side": sell, "file_sha256_16": hashes,
+        "telegram_python_messages": len(tmsgs), "sell_side": sell, "market_memory": memory, "file_sha256_16": hashes,
     }
     (PROOF / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False))
     print(json.dumps({k: summary[k] for k in ("receipts_live", "chain", "hostile_to_pursue", "seller_fields_in_receipts",

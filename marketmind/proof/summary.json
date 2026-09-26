@@ -1,5 +1,5 @@
 {
-  "built_at": "2026-09-26T13:49:43Z",
+  "built_at": "2026-09-26T14:47:31Z",
   "receipts_total": 139,
   "receipts_live": 139,
   "live_window": [
@@ -28,7 +28,7 @@
   "dhash_index_size": 44,
   "seen_ids": 139,
   "apify_runs": {
-    "haketa/marktplaats-scraper": 195,
+    "haketa/marktplaats-scraper": 243,
     "automation-lab/ebay-scraper": 26
   },
   "n8n_executions": [
@@ -72,17 +72,53 @@
       ]
     }
   ],
-  "telegram_python_messages": 12,
+  "telegram_python_messages": 18,
   "sell_side": {
     "present": false
   },
+  "market_memory": {
+    "present": true,
+    "fetch": {
+      "runs": 306,
+      "fetched": 3055,
+      "new": 157,
+      "repeat_rate": 0.949,
+      "usd": 4.598,
+      "runs_per_new": 1.95,
+      "usd_per_new": 0.0293
+    },
+    "lookups": {
+      "comps": {
+        "n": 35,
+        "hit_rate": 0.571,
+        "hit_p50_ms": 0.117,
+        "hit_p95_ms": 1.028
+      },
+      "verdict": {
+        "n": 39,
+        "hit_rate": 0.0,
+        "hit_p50_ms": null,
+        "hit_p95_ms": null
+      }
+    },
+    "store": {
+      "listings": 157,
+      "price_obs": 332,
+      "verdicts": 39,
+      "fetches": 306,
+      "feedback": 0,
+      "product_keys": 152
+    },
+    "cache_hit_receipts": {}
+  },
   "file_sha256_16": {
-    "apify_runs.json": "a55f4112b892e015",
+    "apify_runs.json": "4ba59cb4f0ca34d4",
     "comps_provenance.json": "6b79aaa43af9c0d6",
     "comps_sold_vs_asking.json": "4d51e68e2788e05c",
+    "memory_metrics.json": "5627f0001fdc4ffc",
     "n8n_executions.json": "8c75f8d62f7f9fa7",
     "receipts.redacted.jsonl": "2a4bee6e05459efd",
-    "summary.json": "8eeb7ef71c0696de",
-    "telegram_messages.json": "e5f1cc940a0f3c3b"
+    "summary.json": "ad80dd6c2b482b21",
+    "telegram_messages.json": "77a5a76e9aabd550"
   }
 }

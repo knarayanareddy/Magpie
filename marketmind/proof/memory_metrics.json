@@ -1,0 +1,101 @@
+{
+  "window_h": 24,
+  "fetch": {
+    "runs": 306,
+    "fetched": 3055,
+    "new": 157,
+    "repeat_rate": 0.949,
+    "usd": 4.598,
+    "runs_per_new": 1.95,
+    "usd_per_new": 0.0293
+  },
+  "per_query": [
+    {
+      "q": "nintendo switch",
+      "runs": 63,
+      "new": 20,
+      "usd": 0.945,
+      "usd_per_new": 0.047
+    },
+    {
+      "q": "ps5",
+      "runs": 59,
+      "new": 2,
+      "usd": 0.885,
+      "usd_per_new": 0.442
+    },
+    {
+      "q": "iphone 14",
+      "runs": 58,
+      "new": 15,
+      "usd": 0.87,
+      "usd_per_new": 0.058
+    },
+    {
+      "q": "macbook",
+      "runs": 55,
+      "new": 8,
+      "usd": 0.832,
+      "usd_per_new": 0.104
+    }
+  ],
+  "lookups": {
+    "comps": {
+      "n": 35,
+      "hit_rate": 0.571,
+      "hit_p50_ms": 0.117,
+      "hit_p95_ms": 1.028
+    },
+    "verdict": {
+      "n": 39,
+      "hit_rate": 0.0,
+      "hit_p50_ms": null,
+      "hit_p95_ms": null
+    }
+  },
+  "product_keys": {
+    "rules": {
+      "titles": 152,
+      "hits": 2903
+    }
+  },
+  "learned_cadence_min": {
+    "nintendo switch": {
+      "12h": 5,
+      "13h": 5,
+      "14h": 19,
+      "15h": 6,
+      "16h": 30
+    },
+    "ps5": {
+      "12h": 15,
+      "13h": 5,
+      "14h": 30,
+      "15h": 30,
+      "16h": 30
+    },
+    "iphone 14": {
+      "12h": 5,
+      "13h": 5,
+      "14h": 13,
+      "15h": 30,
+      "16h": 30
+    },
+    "macbook": {
+      "12h": 5,
+      "13h": 5,
+      "14h": 30,
+      "15h": 20,
+      "16h": 30
+    }
+  },
+  "projected_runs_saved_per_day_vs_fixed_5min": 116,
+  "store": {
+    "listings": 157,
+    "price_obs": 332,
+    "verdicts": 39,
+    "fetches": 306,
+    "feedback": 0,
+    "product_keys": 152
+  }
+}
