@@ -101,16 +101,23 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
             listings.append(r_item)
 
     rows, drafts, deduped = [], [], 0
-    # pHash precompute (T09): hash first photo of NEW items in parallel; bytes only from image CDN allowlist
+    # dHash precompute (T09): hash first photo of new items (+ backfill seen ones) in parallel;
+    # bytes only from the image CDN allowlist. Failed hashes retry after 2h (max 3), not never.
     phash_index = st.data.setdefault("phash", {})
-    hashed_ids = {v["id"] for v in phash_index.values()} | set(st.data.setdefault("phash_none", []))
-    to_hash = [it for it in listings if it["id"] not in hashed_ids]   # new items + backfill of seen ones
+    st.data.pop("phash_none", None)                                 # legacy never-retry list
+    failed = st.data.setdefault("phash_failed", {})
+    hashed_ids = {v["id"] for v in phash_index.values()}
+    to_hash = [it for it in listings if it["id"] not in hashed_ids and phash.should_retry(failed, it["id"])]
     item_hashes: dict = {}
     if to_hash and phash.backend():
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=8) as ex:
             item_hashes = dict(zip((it["id"] for it in to_hash), ex.map(phash.item_hash, to_hash)))
-        st.data["phash_none"] = (st.data["phash_none"] + [i for i, h in item_hashes.items() if h is None])[-2000:]
+        for i, h in item_hashes.items():
+            if h is None:
+                phash.mark_failed(failed, i)
+            else:
+                failed.pop(i, None)
     for item in listings:
         is_revisit = item["id"] in revisit_ids
         if st.is_seen(item["id"]) and not is_revisit:
@@ -122,7 +129,7 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
         st.mark_seen(item["id"])
         r = receipts.begin(item)
 
-        # pHash RE-POST GUARD — same photo under a new listing id => never a second offer (fail-closed)
+        # DUPLICATE-PHOTO GUARD (dHash) — same photo under a new listing id => escalate, never a 2nd offer
         ph = item_hashes.get(item["id"])
         if ph:
             prior = phash.find_duplicate(ph, phash_index, item["id"])
@@ -190,7 +197,11 @@ def run(mode: str, gate: str, only: str = "", out_dir: str | None = None) -> dic
                     st.add_outreach()
                     state_name = "drafted"
                     extra = draft
-                    drafts.append({**draft, "listing_id": item["id"]})
+                    c = facts.get("comps") or {}
+                    calc = (f"ask €{item['price_eur']:.0f} → offer €{draft['offer_eur']} · comps {facts.get('comps_key')}: "
+                            f"median €{c.get('median')} MAD €{c.get('mad')} n={c.get('n')} ({c.get('basis', 'asking')}) · "
+                            f"margin_z=({c.get('median')}−{item['price_eur']:.0f})/{c.get('mad')}={facts['margin_z']:.2f}")
+                    drafts.append({**draft, "listing_id": item["id"], "calc": calc})
                     (OUT / "drafts").mkdir(exist_ok=True)
                     (OUT / "drafts" / f"{item['id']}.txt").write_text(draft["text_nl"])
                 else:
@@ -626,6 +637,12 @@ if __name__ == "__main__":
         notifier = notify.Notifier(send=None if not notify.enabled() else report.send_live)
         print(f"Telegram notify: {'on' if notify.enabled() else 'off (TELEGRAM_* unset or NOTIFY_TELEGRAM=0)'}")
         notifier.armed(a.mode, a.gate, interval)
+        import signal
+
+        def _term(signum, frame):  # supervisors/launchd send SIGTERM; background jobs may ignore SIGINT
+            raise KeyboardInterrupt
+        signal.signal(signal.SIGTERM, _term)
+        signal.signal(signal.SIGINT, _term)
         try:
             while True:
                 cycle_t0 = time.time()

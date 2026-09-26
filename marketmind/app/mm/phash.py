@@ -1,13 +1,16 @@
-"""pHash dedupe (T09) — perceptual photo hash so re-posts under a new listing id don't double-offer.
+"""Duplicate-photo signal (T09) — 64-bit difference hash (dHash) of a listing's first photo, so a
+re-post under a new listing id doesn't get a second offer. (Module name `phash` is historical: the
+algorithm is dHash, not DCT pHash.) A match is a SIGNAL that escalates, never proof of identity.
 
 Deterministic, no model (threat-model §Photos). Art XII.1: image bytes are fetched ONLY from the
-pinned marketplace image CDN (host allowlist); seller-supplied URLs in text are never fetched.
+pinned marketplace image CDN (host allowlist); redirects are re-validated against the same allowlist
+at every hop; seller-supplied URLs in text are never fetched.
 Fail-open by design: a photo that can't be hashed yields None and the item continues on its
 id-dedupe path — hashing may add suspicion (duplicate_photo), it can never grant a pursue.
 Backend: Pillow if installed, else macOS `sips` (zero-dependency fallback). No backend => disabled.
 """
 from __future__ import annotations
-import io, os, shutil, subprocess, tempfile, time, urllib.parse, urllib.request
+import io, os, shutil, subprocess, tempfile, time, urllib.error, urllib.parse, urllib.request
 
 ALLOWED_HOSTS = ("images.marktplaats.com", "images.2dehands.com")
 DUP_MAX_HAMMING = int(os.environ.get("PHASH_MAX_HAMMING", "6"))   # of 64 bits
@@ -40,10 +43,25 @@ def _allowed(url: str) -> str | None:
     return url
 
 
+class _AllowlistRedirects(urllib.request.HTTPRedirectHandler):
+    """Re-check every redirect hop against the CDN allowlist (a 30x must not escape Art XII.1)."""
+    max_redirections = 3
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if _allowed(urllib.parse.urljoin(req.full_url, newurl)) is None:
+            raise urllib.error.HTTPError(newurl, code, "redirect off allowlist", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_AllowlistRedirects)
+
+
 def _fetch(url: str) -> bytes | None:
-    req = urllib.request.Request(url, headers={"User-Agent": "Magpie-phash/1"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Magpie-dhash/1"})
     try:
-        with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_S) as r:
+        with _OPENER.open(req, timeout=FETCH_TIMEOUT_S) as r:
+            if _allowed(r.geturl()) is None:      # belt-and-braces: final URL must still be on the CDN
+                return None
             data = r.read(MAX_BYTES + 1)
         return data if 0 < len(data) <= MAX_BYTES else None
     except Exception:
@@ -128,6 +146,26 @@ def find_duplicate(h: str, index: dict, self_id: str) -> str | None:
         if v["id"] != self_id and hamming(h, k) <= DUP_MAX_HAMMING:
             return v["id"]
     return None
+
+
+RETRY_AFTER_S = int(os.environ.get("PHASH_RETRY_S", "7200"))  # failed hash => retry after 2h, not never
+MAX_RETRIES = 3
+
+
+def should_retry(failed: dict, listing_id: str, now: float | None = None) -> bool:
+    """failed: {listing_id: {"ts": epoch, "n": attempts}}. Transient CDN errors must not blind the guard."""
+    f = failed.get(listing_id)
+    if not f:
+        return True
+    return f["n"] < MAX_RETRIES and ((now or time.time()) - f["ts"]) >= RETRY_AFTER_S
+
+
+def mark_failed(failed: dict, listing_id: str, now: float | None = None) -> None:
+    f = failed.setdefault(listing_id, {"ts": 0, "n": 0})
+    f["ts"], f["n"] = (now or time.time()), f["n"] + 1
+    if len(failed) > 2000:                       # bound state size: drop oldest
+        for k in sorted(failed, key=lambda k: failed[k]["ts"])[: len(failed) - 2000]:
+            failed.pop(k)
 
 
 def remember(h: str, index: dict, listing_id: str) -> None:

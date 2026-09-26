@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory() as td:
     boom.armed("live", "v0", 300)
     check(True, "send failure does not raise into the loop")
 
-# 2. pHash: dHash math, allowlist, near-dup detection
+# 2. duplicate-photo signal (dHash): math, allowlist, redirects, near-dup detection, retry window
 check(phash._allowed("https://evil.example.com/a.jpg") is None, "pHash refuses non-CDN host (Art XII.1)")
 check(phash._allowed("http://images.marktplaats.com/a.jpg") is None, "pHash refuses plain http")
 check(phash._allowed("//images.marktplaats.com/api/x.jpg") == "https://images.marktplaats.com/api/x.jpg",
@@ -55,6 +55,25 @@ phash.remember("ffff0000ffff0000", idx, "a1")
 check(phash.find_duplicate("ffff0000ffff0001", idx, "b2") == "a1", "hamming 1 => duplicate of prior id")
 check(phash.find_duplicate("0000ffff0000ffff", idx, "b2") is None, "distant hash => not duplicate")
 check(phash.find_duplicate("ffff0000ffff0000", idx, "a1") is None, "same listing id is not its own dup")
+# redirect hop off the CDN allowlist is refused (Art XII.1)
+import urllib.request as _u
+_h = phash._AllowlistRedirects()
+_req = _u.Request("https://images.marktplaats.com/a.jpg")
+try:
+    _h.redirect_request(_req, None, 302, "Found", {}, "https://evil.example.com/steal.jpg")
+    check(False, "redirect to non-CDN host refused")
+except Exception:
+    check(True, "redirect to non-CDN host refused")
+check(_h.redirect_request(_req, None, 302, "Found", {}, "https://images.marktplaats.com/b.jpg") is not None,
+      "redirect within CDN allowed")
+# failed hash retries after 2h, max 3 attempts (not never)
+fl: dict = {}
+check(phash.should_retry(fl, "z", now=1000.0), "never-tried listing is hashable")
+phash.mark_failed(fl, "z", now=1000.0)
+check(not phash.should_retry(fl, "z", now=1000.0 + 60), "no retry within 2h")
+check(phash.should_retry(fl, "z", now=1000.0 + phash.RETRY_AFTER_S), "retry after 2h")
+phash.mark_failed(fl, "z", now=9e4); phash.mark_failed(fl, "z", now=9e5)
+check(not phash.should_retry(fl, "z", now=9e9), "gives up after 3 attempts")
 if phash.backend():
     import io
     try:
@@ -92,6 +111,17 @@ unk = {"id": "u", "title": "Obscure tin toy", "price_eur": 20.0, "description": 
 d = decide.decide(unk, decide.facts_for(unk, comps))
 check(d.reasons == ["no_comps"], "unknown item keeps no_comps (watchlist-recoverable)")
 check(not rerank.is_non_device_listing("MacBook Air M1 met oplader"), "bundle 'met oplader' stays a device")
+for t_ in ("Nintendo Switch Lite Blauw met hoes", "Nintendo Switch 2 met Mario Kart World"):
+    it_ = {"id": "l", "title": t_, "price_eur": 109.0, "description": ""}
+    d_ = decide.decide(it_, decide.facts_for(it_, comps))
+    check(d_.reasons == ["model_mismatch"], f"'{t_}' never priced vs full-Switch comps ({d_.reasons})")
+acc = {"id": "c", "title": "SP Case voor iPhone 14 - Topstaat", "price_eur": 24.0, "description": ""}
+d_ = decide.decide(acc, decide.facts_for(acc, comps))
+check(d_.reasons == ["not_device"], f"'case voor iPhone' is an accessory, not a device ({d_.reasons})")
+gen = {"id": "g", "title": "Iphone 11 128GB", "price_eur": 150.0, "description": ""}
+d = decide.decide(gen, decide.facts_for(gen, comps))
+check(d.action == "escalate" and d.reasons == ["model_mismatch"],
+      f"iPhone 11 never priced vs iPhone 13-15 comps ({d.reasons})")
 
 # 4. kill-switch race: phone pause written mid-cycle survives the loop's next save
 with tempfile.TemporaryDirectory() as td:
